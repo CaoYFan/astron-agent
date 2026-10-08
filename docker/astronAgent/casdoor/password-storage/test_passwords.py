@@ -31,6 +31,16 @@ def account(password="old password", kind="plain", name="alice"):
 
 
 class PasswordStorageTests(unittest.TestCase):
+    def test_duplicate_or_unexpected_organization_owner_is_rejected(self):
+        duplicate = organization()
+        duplicate["owner"] = "unexpected-owner"
+        for orgs in ([organization(), duplicate], [duplicate]):
+            with self.subTest(organizations=len(orgs)):
+                with self.assertRaises(MigrationError):
+                    plan_migration(orgs, [account()])
+                with self.assertRaises(MigrationError):
+                    verify_storage(orgs, [account()])
+
     def test_plain_and_inherited_accounts_keep_their_password(self):
         users = [account(), account("long password: " + "x" * 100, "", "bob")]
         before = copy.deepcopy(users)

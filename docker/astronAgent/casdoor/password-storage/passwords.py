@@ -51,9 +51,21 @@ def strong_hash(password_type, password):
     )
 
 
+def index_organizations(organizations):
+    """User.owner references an organization name in Casdoor's admin scope."""
+    by_name = {}
+    for org in organizations:
+        if org["name"] in by_name:
+            raise MigrationError("Duplicate organization names require review")
+        if org["owner"] != "admin":
+            raise MigrationError("Unsupported organization owner requires review")
+        by_name[org["name"]] = org
+    return by_name
+
+
 def plan_migration(organizations, users, hasher=HASHER):
     """Build all changes before writing; preserve already-hashed credentials."""
-    by_name = {org["name"]: org for org in organizations}
+    by_name = index_organizations(organizations)
     changes = []
     for org in organizations:
         if org["password_type"] not in {"", "plain", *STRONG_TYPES}:
@@ -93,7 +105,7 @@ def plan_migration(organizations, users, hasher=HASHER):
 
 def verify_storage(organizations, users):
     """Read-only gate: every nonempty local password must be a strong hash."""
-    by_name = {org["name"]: org for org in organizations}
+    by_name = index_organizations(organizations)
     if not organizations or "built-in" not in by_name:
         raise MigrationError("Casdoor initialization is incomplete")
     for org in organizations:

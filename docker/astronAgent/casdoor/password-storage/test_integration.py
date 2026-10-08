@@ -58,7 +58,10 @@ class CasdoorIntegration(unittest.TestCase):
             str(override),
         ]
         cls.env = dict(
-            os.environ, CASDOOR_BIND_ADDRESS="127.0.0.1", CASDOOR_PORT="18008"
+            os.environ,
+            CASDOOR_BIND_ADDRESS="127.0.0.1",
+            CASDOOR_PORT="18008",
+            CASDOOR_MYSQL_PASSWORD="fixture-custom-db-password",
         )
         cls.compose("up", "-d", "casdoor")
         wait_for_casdoor(BASE_URL, timeout=180)
@@ -66,7 +69,7 @@ class CasdoorIntegration(unittest.TestCase):
             host="127.0.0.1",
             port=13367,
             user="casdoor",
-            password="casdoor123",
+            password=cls.env["CASDOOR_MYSQL_PASSWORD"],
             database="casdoor",
             autocommit=False,
             cursorclass=pymysql.cursors.DictCursor,
