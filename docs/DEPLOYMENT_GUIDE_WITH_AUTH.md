@@ -177,7 +177,8 @@ cd docker/astronAgent
 # Validate the fully rendered credential-sharing and health contract before changing the stack
 python3 scripts/verify_security_contract.py --compose-file docker-compose-with-auth.yaml
 
-# Start all services and wait for configured health checks to converge
+# First complete docs/CASDOOR_PASSWORD_STORAGE.md for new or existing databases.
+# Start all services and wait for configured health checks to converge.
 docker compose -f docker-compose-with-auth.yaml up -d --wait --wait-timeout 900
 ```
 

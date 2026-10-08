@@ -10,7 +10,7 @@
       "logoDark": "",
       "favicon": "https://cdn.casbin.org/img/favicon.png",
       "hasPrivilegeConsent": false,
-      "passwordType": "plain",
+      "passwordType": "argon2id",
       "passwordSalt": "",
       "passwordOptions": [
         "AtLeast6"
@@ -383,7 +383,7 @@
       "logoDark": "",
       "favicon": "https://cdn.casbin.org/img/casbin/favicon.ico",
       "hasPrivilegeConsent": false,
-      "passwordType": "plain",
+      "passwordType": "argon2id",
       "passwordSalt": "",
       "passwordOptions": [
         "AtLeast6"
