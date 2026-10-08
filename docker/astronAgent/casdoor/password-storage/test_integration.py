@@ -85,10 +85,10 @@ class CasdoorIntegration(unittest.TestCase):
         cls.compose("down", "--volumes", "--remove-orphans", check=False)
         cls.temp.cleanup()
 
-    def request(self, endpoint, payload, opener=None):
+    def request(self, endpoint, payload, opener=None, base_url=BASE_URL):
         client = opener or urllib.request.build_opener()
         req = urllib.request.Request(
-            BASE_URL + endpoint,
+            base_url + endpoint,
             data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -248,6 +248,21 @@ class CasdoorIntegration(unittest.TestCase):
             "up", "-d", "--force-recreate", "casdoor-password-check", "casdoor-gateway"
         )
         wait_for_casdoor("http://127.0.0.1:18008/")
+        # Verify the gateway forwards to the real identity service (not merely a
+        # listening nginx returning 502), without imposing its default 1 MiB cap.
+        public_login = self.request(
+            "/api/login",
+            {
+                "application": "app-built-in",
+                "organization": "built-in",
+                "username": "admin",
+                "password": "123",
+                "type": "login",
+                "ignoredTransportFixture": "x" * (1024 * 1024 + 1),
+            },
+            base_url="http://127.0.0.1:18008",
+        )
+        self.assertEqual(public_login["status"], "ok")
         verify_storage(*self.snapshot())
 
 
