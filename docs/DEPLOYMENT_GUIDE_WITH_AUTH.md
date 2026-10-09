@@ -177,7 +177,8 @@ cd docker/astronAgent
 # Validate the fully rendered credential-sharing and health contract before changing the stack
 python3 scripts/verify_security_contract.py --compose-file docker-compose-with-auth.yaml
 
-# Start all services and wait for configured health checks to converge
+# First complete docs/CASDOOR_PASSWORD_STORAGE.md for new or existing databases.
+# Start all services and wait for configured health checks to converge.
 docker compose -f docker-compose-with-auth.yaml up -d --wait --wait-timeout 900
 ```
 
@@ -206,7 +207,7 @@ You can create new applications and organizations in Casdoor as needed, and upda
 1. Visit the Casdoor management console: [http://localhost:8000](http://localhost:8000)
 2. Log in with the default administrator account: `admin / 123`
 3. **Create Organization**
-   Go to the [http://localhost:8000/organizations](http://localhost:8000/organizations) page, click "Add", fill in the organization name, save and exit.
+   Go to the [http://localhost:8000/organizations](http://localhost:8000/organizations) page, click "Add", fill in the organization name, select **Argon2id** as the password type, then save and exit. Do not use plaintext password storage for new organizations.
 4. **Create Application and Bind Organization**
    Go to the [http://localhost:8000/applications](http://localhost:8000/applications) page, click "Add".
 

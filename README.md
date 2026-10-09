@@ -91,7 +91,9 @@ vim .env
 For environment variable configuration, please refer to the documentation:[DEPLOYMENT_GUIDE_WITH_AUTH.md](https://github.com/iflytek/astron-agent/blob/main/docs/DEPLOYMENT_GUIDE_WITH_AUTH.md#step-2-configure-astronagent-environment-variables)
 
 ```bash
-# Start all services (including Casdoor)
+# Complete the required private initialization/password migration first:
+# docs/CASDOOR_PASSWORD_STORAGE.md
+# Then start all services; the authentication gateway requires a passing check.
 docker compose -f docker-compose-with-auth.yaml up -d
 ```
 

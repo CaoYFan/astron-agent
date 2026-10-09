@@ -177,7 +177,8 @@ cd docker/astronAgent
 # 变更服务前，先校验完整渲染后的凭据共享与健康检查契约
 python3 scripts/verify_security_contract.py --compose-file docker-compose-with-auth.yaml
 
-# 启动所有服务，并等待已配置的健康检查收敛
+# 新旧数据库均须先完成 docs/zh/CASDOOR_PASSWORD_STORAGE.md 的私有初始化与迁移。
+# 启动所有服务，并等待已配置的健康检查收敛。
 docker compose -f docker-compose-with-auth.yaml up -d --wait --wait-timeout 900
 ```
 
@@ -206,7 +207,7 @@ AstronAgent 启动后，访问控制台并登录，在左侧菜单进入 **平�
 1. 访问 Casdoor 管理控制台： [http://localhost:8000](http://localhost:8000)
 2. 使用默认管理员账号登录：`admin / 123`
 3. **创建组织**
-   进入 [http://localhost:8000/organizations](http://localhost:8000/organizations) 页面，点击"添加"，填写组织名称后保存并退出。
+   进入 [http://localhost:8000/organizations](http://localhost:8000/organizations) 页面，点击"添加"，填写组织名称，将密码类型设为 **Argon2id**，然后保存并退出。新组织不要使用明文密码存储。
 4. **创建应用并绑定组织**
    进入 [http://localhost:8000/applications](http://localhost:8000/applications) 页面，点击"添加"。
 
