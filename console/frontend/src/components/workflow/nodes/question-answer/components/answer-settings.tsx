@@ -1,3 +1,4 @@
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
 import React, { useRef, useState, useMemo } from 'react';
 import { useClickAway } from 'ahooks';
 import { FlowInputNumber } from '@/components/workflow/ui';
@@ -13,7 +14,7 @@ import answerSettingsParams from '@/assets/imgs/workflow/answer-settings-params.
 const UserMustAnswer = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<'data' | 'handleChangeNodeParam'>): React.ReactElement => {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -44,7 +45,8 @@ const UserMustAnswer = ({
               edge => edge.sourceHandle === optionDefaultAnswerOptionId
             );
             if (
-              edges?.filter(
+              edge &&
+              edges.filter(
                 item =>
                   item?.source === edge?.source && item?.target === edge?.target
               )?.length === 1
@@ -60,7 +62,10 @@ const UserMustAnswer = ({
           handleChangeNodeParam((data, value) => {
             data.nodeParam.needReply = value;
             if (!value) {
-              data?.nodeParam?.optionAnswer.push({
+              (
+                data.nodeParam.optionAnswer ??
+                (data.nodeParam.optionAnswer = [])
+              ).push({
                 id: `option-one-of::${uuid()}`,
                 name: 'default',
                 type: 1,
@@ -81,7 +86,7 @@ const UserMustAnswer = ({
 const ConversationTimeout = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<'data' | 'handleChangeNodeParam'>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="w-full flex items-center gap-3">
@@ -100,7 +105,7 @@ const ConversationTimeout = ({
         min={2}
         max={5}
         step={1}
-        value={data?.nodeParam?.timeout}
+        value={data?.nodeParam?.timeout ?? undefined}
         className="flex-1 config-slider nodrag"
         onChange={value =>
           handleChangeNodeParam(
@@ -111,7 +116,7 @@ const ConversationTimeout = ({
       />
       <div className="flex items-center gap-2.5">
         <FlowInputNumber
-          value={data?.nodeParam?.timeout}
+          value={data?.nodeParam?.timeout ?? undefined}
           onChange={value =>
             handleChangeNodeParam(
               (data, value) => (data.nodeParam.timeout = value),
@@ -143,7 +148,9 @@ const ConversationTimeout = ({
 const MaxRetrySettings = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement | null => {
+}: NodePropsFor<
+  'data' | 'handleChangeNodeParam'
+>): React.ReactElement | null => {
   if (data?.nodeParam?.answerType == 'direct') {
     return null;
   }
@@ -165,23 +172,29 @@ const MaxRetrySettings = ({
         min={2}
         max={5}
         step={1}
-        value={data?.nodeParam?.directAnswer?.maxRetryCounts}
+        value={data?.nodeParam?.directAnswer?.maxRetryCounts ?? undefined}
         className="flex-1 config-slider nodrag"
         onChange={value =>
           handleChangeNodeParam(
             (data, value) =>
-              (data.nodeParam.directAnswer.maxRetryCounts = value),
+              (data.nodeParam.directAnswer = {
+                ...data.nodeParam.directAnswer,
+                maxRetryCounts: value,
+              }),
             value
           )
         }
       />
       <div className="flex items-center gap-2.5">
         <FlowInputNumber
-          value={data?.nodeParam?.directAnswer?.maxRetryCounts}
+          value={data?.nodeParam?.directAnswer?.maxRetryCounts ?? undefined}
           onChange={value =>
             handleChangeNodeParam(
               (data, value) =>
-                (data.nodeParam.directAnswer.maxRetryCounts = value),
+                (data.nodeParam.directAnswer = {
+                  ...data.nodeParam.directAnswer,
+                  maxRetryCounts: value,
+                }),
               value
             )
           }
@@ -189,7 +202,10 @@ const MaxRetrySettings = ({
             if (data?.nodeParam?.directAnswer?.maxRetryCounts === null) {
               handleChangeNodeParam(
                 (data, value) =>
-                  (data.nodeParam.directAnswer.maxRetryCounts = value),
+                  (data.nodeParam.directAnswer = {
+                    ...data.nodeParam.directAnswer,
+                    maxRetryCounts: value,
+                  }),
                 3
               );
             }
@@ -208,7 +224,10 @@ const MaxRetrySettings = ({
   );
 };
 
-function Index({ data, handleChangeNodeParam }): React.ReactElement {
+function Index({
+  data,
+  handleChangeNodeParam,
+}: NodePropsFor<'data' | 'handleChangeNodeParam'>): React.ReactElement {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false); // 默认关闭
   const ref = useRef(null);

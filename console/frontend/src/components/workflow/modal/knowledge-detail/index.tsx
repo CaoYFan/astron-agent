@@ -18,7 +18,7 @@ import {
   listFileDirectoryTree,
 } from '@/services/knowledge';
 import { modifyChunks } from '@/utils';
-import { debounce, cloneDeep } from 'lodash';
+import { debounce } from 'lodash';
 import { fileType, generateType } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import {
@@ -43,7 +43,6 @@ import {
   KnowledgeFileItem,
   DirectoryItem,
   PaginationState,
-  KnowledgeDetailModalInfo,
   FileInfo,
   ChunkItem,
   useKnowledgeDetailProps,
@@ -52,14 +51,77 @@ import {
 import { Icons } from '@/components/workflow/icons';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
+import type { KnowledgeItem } from '@/components/workflow/types/modal/add-knowledge';
+import { toggleKnowledgeSelection } from '../knowledge-selection';
+
+type KnowledgeDetailModalInfo = ReturnType<
+  typeof useFlowsManager.getState
+>['knowledgeDetailModalInfo'];
+
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
+interface KnowledgeContext
+  extends KnowledgeDetailProps,
+    useKnowledgeDetailProps {
+  knowledgeDetail: { name: string };
+  setKnowledgeDetailModalInfo: ReturnType<
+    typeof useFlowsManager.getState
+  >['setKnowledgeDetailModalInfo'];
+  knowledgeDetailModalInfo: KnowledgeDetailModalInfo;
+  directoryTree: DirectoryItem[];
+  setDirectoryTree: SetState<DirectoryItem[]>;
+  pagination: PaginationState;
+  setPagination: SetState<PaginationState>;
+  searchValue: string;
+  setSearchValue: SetState<string>;
+  searchData: KnowledgeFileItem[];
+  setSearchData: SetState<KnowledgeFileItem[]>;
+  dataResource: KnowledgeFileItem[];
+  setDataResource: SetState<KnowledgeFileItem[]>;
+  setLoading: SetState<boolean>;
+}
+interface FileSummary {
+  sliceType?: number;
+  hitCount?: number;
+  lengthRange?: number[];
+  knowledgeAvgLength?: number;
+  knowledgeCount?: number;
+}
+interface FileContext extends FileDetailProps, useFileDetailProps {
+  knowledgeDetailModalInfo: KnowledgeDetailModalInfo;
+  setKnowledgeDetailModalInfo: ReturnType<
+    typeof useFlowsManager.getState
+  >['setKnowledgeDetailModalInfo'];
+  fileList: KnowledgeFileItem[];
+  setFileList: SetState<KnowledgeFileItem[]>;
+  fileInfo: FileInfo;
+  setFileInfo: SetState<FileInfo>;
+  parameters: FileSummary;
+  setParameters: SetState<FileSummary>;
+  loadingRef: React.MutableRefObject<boolean>;
+  setLoadingData: SetState<boolean>;
+  chunks: ChunkItem[];
+  setChunks: SetState<ChunkItem[]>;
+  chunkRef: React.RefObject<HTMLDivElement>;
+  searchRef: React.RefObject<HTMLInputElement>;
+  searchValue: string;
+  setSearchValue: SetState<string>;
+  pageNumber: number;
+  setPageNumber: SetState<number>;
+  hasMore: boolean;
+  setHasMore: SetState<boolean>;
+  showMore: boolean;
+  setShowMore: SetState<boolean>;
+  setCurrentChunk: SetState<ChunkItem | null>;
+  setEditModal: SetState<boolean>;
+}
 
 function KnowledgePreviewModal(): React.ReactElement {
   const knowledgeDetailModalOpen = useFlowsManager(
     state => state.knowledgeDetailModalInfo?.open
   );
   const [currentTab, setCurrentTab] = useState('knowledge');
-  const [parentId, setParentId] = useState(-1);
-  const [fileId, setFileId] = useState(-1);
+  const [parentId, setParentId] = useState<number | string>(-1);
+  const [fileId, setFileId] = useState<number | string>(-1);
 
   return (
     <>
@@ -101,7 +163,10 @@ function KnowledgePreviewModal(): React.ReactElement {
 const KnowledgeHeader = ({
   knowledgeDetail,
   setKnowledgeDetailModalInfo,
-}): React.ReactElement => {
+}: Pick<
+  KnowledgeContext,
+  'knowledgeDetail' | 'setKnowledgeDetailModalInfo'
+>): React.ReactElement => {
   return (
     <div className="flex items-center justify-between font-medium pr-6">
       <div className="flex items-center gap-2">
@@ -137,7 +202,23 @@ const KnowledgeToolbar = ({
   knowledgeDetailModalInfo,
   ragType,
   tag,
-}): React.ReactElement => {
+  knowledgeDetail,
+}: Pick<
+  KnowledgeContext,
+  | 'isPro'
+  | 'id'
+  | 'directoryTree'
+  | 'setParentId'
+  | 'pagination'
+  | 'searchValue'
+  | 'handleInputChange'
+  | 'checkedIds'
+  | 'repoId'
+  | 'knowledgeDetailModalInfo'
+  | 'ragType'
+  | 'tag'
+  | 'knowledgeDetail'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const autoSaveCurrentFlow = useFlowsManager(
     state => state.autoSaveCurrentFlow
@@ -146,55 +227,34 @@ const KnowledgeToolbar = ({
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const setNode = currentStore(state => state.setNode);
   const checkNode = currentStore(state => state.checkNode);
-  const handleKnowledgesChange = useMemoizedFn((knowledge: unknown): void => {
-    autoSaveCurrentFlow();
-    if (isPro) {
+  const handleKnowledgesChange = useMemoizedFn(
+    (
+      selection: Partial<
+        Pick<
+          KnowledgeItem,
+          'id' | 'name' | 'coreRepoId' | 'outerRepoId' | 'tag'
+        >
+      > & { repoId?: string | number }
+    ): void => {
+      const knowledgeId = selection.id ?? selection.repoId;
+      const externalRepoId = selection.coreRepoId || selection.outerRepoId;
+      if (!knowledgeId || !externalRepoId) return;
+      const knowledge: KnowledgeItem = {
+        ...selection,
+        id: String(knowledgeId),
+        name: selection.name ?? knowledgeDetail.name,
+      };
+      autoSaveCurrentFlow();
       setNode(id, old => {
-        const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
-          item => item.id === knowledge.id
-        );
-        if (findKnowledgeIndex === -1) {
-          old.data.nodeParam.repoIds.push(
-            knowledge.coreRepoId || knowledge.outerRepoId
-          );
-          old.data.nodeParam.repoList.push(knowledge);
-        } else {
-          old.data.nodeParam.repoIds.splice(findKnowledgeIndex, 1);
-          old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
-        }
-        if (knowledge?.tag === 'CBG-RAG') {
-          old.data.nodeParam.repoType = 2;
-        } else {
-          old.data.nodeParam.repoType = 3;
-        }
-        return {
-          ...cloneDeep(old),
-        };
+        const updated = toggleKnowledgeSelection(old, knowledge, isPro);
+        if (!isPro)
+          updated.data.outputs = generateKnowledgeOutput(knowledge.tag ?? '');
+        return updated;
       });
-    } else {
-      setNode(id, old => {
-        const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
-          item => item.id === knowledge.id
-        );
-        if (findKnowledgeIndex === -1) {
-          old.data.nodeParam.repoId.push(
-            knowledge.coreRepoId || knowledge.outerRepoId
-          );
-          old.data.nodeParam.repoList.push(knowledge);
-        } else {
-          old.data.nodeParam.repoId.splice(findKnowledgeIndex, 1);
-          old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
-        }
-        old.data.nodeParam.ragType = knowledge?.tag;
-        old.data.outputs = generateKnowledgeOutput(knowledge?.tag);
-        return {
-          ...cloneDeep(old),
-        };
-      });
+      checkNode(id);
+      canPublishSetNot();
     }
-    checkNode(id);
-    canPublishSetNot();
-  });
+  );
   return (
     <div className="mt-6 flex items-center justify-between pr-6">
       <div className="flex items-center">
@@ -205,12 +265,12 @@ const KnowledgeToolbar = ({
               className="w-[22px] h-[22px] mr-2"
               alt=""
             />
-            {directoryTree.map((item: unknown, index) => (
+            {directoryTree.map((item, index) => (
               <span key={index} className="flex items-center">
                 <span
                   title={item.name}
                   className="max-w-[100px] text-overflow cursor-pointer"
-                  onClick={() => setParentId(item.parentId)}
+                  onClick={() => setParentId(item.parentId ?? -1)}
                 >
                   {item.name}
                 </span>
@@ -252,7 +312,7 @@ const KnowledgeToolbar = ({
           </Button>
         ) : (
           <Button
-            disabled={ragType && tag !== ragType}
+            disabled={Boolean(ragType && tag !== ragType)}
             type="primary"
             onClick={() => {
               handleKnowledgesChange(knowledgeDetailModalInfo);
@@ -302,7 +362,21 @@ const KnowledgeTable = ({
   searchData,
   dataResource,
   setParentId,
-}): React.ReactElement => {
+}: Pick<
+  KnowledgeContext,
+  | 'searchValue'
+  | 'setSearchData'
+  | 'setDataResource'
+  | 'setCurrentTab'
+  | 'setFileId'
+  | 'setPagination'
+  | 'setSearchValue'
+  | 'tag'
+  | 'pagination'
+  | 'searchData'
+  | 'dataResource'
+  | 'setParentId'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const columns: TableColumnsType<KnowledgeFileItem> = [
     {
@@ -342,7 +416,7 @@ const KnowledgeTable = ({
       title: t('knowledge.characterCount'),
       dataIndex: 'number',
       key: 'number',
-      render: (_, record): string | undefined => {
+      render: (_, record): number | undefined => {
         return record.isFile ? record.fileInfoV2?.charCount : undefined;
       },
     },
@@ -373,9 +447,13 @@ const KnowledgeTable = ({
       render: (enabled, item): React.ReactElement | null => {
         return item.isFile ? (
           <Switch
-            disabled={['block', 'review'].includes(item.auditSuggest || '')}
+            disabled={['block', 'review'].includes(
+              'auditSuggest' in item && typeof item.auditSuggest === 'string'
+                ? item.auditSuggest
+                : ''
+            )}
             size="small"
-            checked={item.fileInfoV2?.enabled}
+            checked={Boolean(item.fileInfoV2?.enabled)}
             onChange={(checked, event) => enableFile(item, event)}
             className="list-switch ml-4"
           />
@@ -398,7 +476,7 @@ const KnowledgeTable = ({
         setSearchData(files => {
           const currentFile = searchData.find(item => item.id === record.id);
           if (currentFile?.fileInfoV2) {
-            currentFile.fileInfoV2.enabled = enabled === 1;
+            currentFile.fileInfoV2.enabled = enabled;
           }
           return [...files];
         });
@@ -406,7 +484,7 @@ const KnowledgeTable = ({
         setDataResource(files => {
           const currentFile = files.find(item => item.id === record.id);
           if (currentFile?.fileInfoV2) {
-            currentFile.fileInfoV2.enabled = enabled === 1;
+            currentFile.fileInfoV2.enabled = enabled;
           }
           return [...files];
         });
@@ -426,7 +504,9 @@ const KnowledgeTable = ({
       setSearchValue('');
     }
   }
-  function rowProps(record: KnowledgeFileItem): unknown {
+  function rowProps(
+    record: KnowledgeFileItem
+  ): React.HTMLAttributes<HTMLTableRowElement> {
     return tag !== 'SparkDesk-RAG'
       ? {
           onClick: () => handleRowClick(record),
@@ -477,7 +557,17 @@ const useKnowledgeDetail = ({
   pagination,
   setPagination,
   setDirectoryTree,
-}): useKnowledgeDetailProps => {
+}: Pick<
+  KnowledgeContext,
+  | 'setSearchValue'
+  | 'parentId'
+  | 'setSearchData'
+  | 'setLoading'
+  | 'setDataResource'
+  | 'pagination'
+  | 'setPagination'
+  | 'setDirectoryTree'
+>): useKnowledgeDetailProps => {
   const controllerRef = useRef<AbortController | null>(null);
   const knowledgeDetailModalInfo = useFlowsManager(
     state => state.knowledgeDetailModalInfo
@@ -485,11 +575,11 @@ const useKnowledgeDetail = ({
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
   const repoId = useMemo(
-    () => knowledgeDetailModalInfo.repoId,
+    () => String(knowledgeDetailModalInfo.repoId ?? ''),
     [knowledgeDetailModalInfo]
   );
   const tag = useMemo(
-    () => (knowledgeDetailModalInfo as KnowledgeDetailModalInfo).tag,
+    () => knowledgeDetailModalInfo.tag ?? '',
     [knowledgeDetailModalInfo]
   );
   const id = useMemo(
@@ -500,7 +590,7 @@ const useKnowledgeDetail = ({
     return nodes?.find(item => item.id === id)?.data.nodeParam.repoList || [];
   }, [nodes, knowledgeDetailModalInfo?.nodeId]);
   const checkedIds = useMemo(() => {
-    return repoList?.map(item => item?.id) || [];
+    return repoList.map(item => String(item.id)) || [];
   }, [repoList]);
   const ragType = useMemo(() => {
     return repoList?.[0]?.tag || '';
@@ -591,7 +681,7 @@ const useKnowledgeDetail = ({
     };
     queryFileList(params)
       .then(data => {
-        const files = data.pageData.map((item: unknown) => ({
+        const files = (data.pageData ?? []).map(item => ({
           ...item,
           type: fileType(item),
           size: item.fileInfoV2?.size,
@@ -682,9 +772,9 @@ function KnowledgeDetail({
   useEffect(() => {
     if (repoId && tag) {
       getKnowledgeDetail(
-        knowledgeDetailModalInfo.repoId,
-        (knowledgeDetailModalInfo as KnowledgeDetailModalInfo).tag || ''
-      ).then((res: unknown) => {
+        String(knowledgeDetailModalInfo.repoId),
+        knowledgeDetailModalInfo.tag || ''
+      ).then(res => {
         setKnowledgeDetail(res);
       });
     }
@@ -701,6 +791,7 @@ function KnowledgeDetail({
         setKnowledgeDetailModalInfo={setKnowledgeDetailModalInfo}
       />
       <KnowledgeToolbar
+        knowledgeDetail={knowledgeDetail}
         isPro={isPro}
         id={id}
         directoryTree={directoryTree}
@@ -859,7 +950,18 @@ const FileHeader = ({
   setSearchValue,
   setFileId,
   setKnowledgeDetailModalInfo,
-}): React.ReactElement => {
+}: Pick<
+  FileContext,
+  | 'setCurrentTab'
+  | 'otherFiles'
+  | 'setShowMore'
+  | 'fileInfo'
+  | 'showMore'
+  | 'searchRef'
+  | 'setSearchValue'
+  | 'setFileId'
+  | 'setKnowledgeDetailModalInfo'
+>): React.ReactElement => {
   return (
     <div className="flex justify-between items-center pb-4 border-b border-[#E2E8FF] pr-6">
       <div className="flex items-center gap-2">
@@ -951,7 +1053,13 @@ const FileHeader = ({
   );
 };
 
-const FileSearch = ({ searchRef, fetchDataDebounce }): React.ReactElement => {
+const FileSearch = ({
+  searchRef,
+  fetchDataDebounce,
+}: Pick<
+  FileContext,
+  'searchRef' | 'fetchDataDebounce'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between">
@@ -981,7 +1089,15 @@ const ChunkList = ({
   setCurrentChunk,
   setEditModal,
   enableChunk,
-}): React.ReactElement => {
+}: Pick<
+  FileContext,
+  | 'chunks'
+  | 'chunkRef'
+  | 'handleScroll'
+  | 'setCurrentChunk'
+  | 'setEditModal'
+  | 'enableChunk'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -992,7 +1108,7 @@ const ChunkList = ({
           onScroll={handleScroll}
         >
           <div className="mt-4 grid sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-3 3xl:grid-cols-3 gap-4 items-end">
-            {chunks.map((item: unknown, index) => (
+            {chunks.map((item, index) => (
               <div
                 key={item.id}
                 className="rounded-xl bg-[#F6F6FD] p-4 h-[220px] flex flex-col group cursor-pointer file-chunk-item"
@@ -1003,7 +1119,7 @@ const ChunkList = ({
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
-                    {['block', 'review'].includes(item.auditSuggest) && (
+                    {['block', 'review'].includes(item.auditSuggest ?? '') && (
                       <div className="rounded border border-[#FFA19B] bg-[#fff5f4] px-2 py-1 text-[#E92215] text-xs mr-2.5">
                         {t('knowledge.violation')}
                       </div>
@@ -1062,7 +1178,9 @@ const ChunkList = ({
                       </span>
                     </div>
                     <Switch
-                      disabled={['block', 'review'].includes(item.auditSuggest)}
+                      disabled={['block', 'review'].includes(
+                        item.auditSuggest ?? ''
+                      )}
                       size="small"
                       checked={item.enabled ? true : false}
                       onChange={(checked, event) => {
@@ -1089,7 +1207,9 @@ const ChunkList = ({
   );
 };
 
-const FileParameters = ({ parameters }): React.ReactElement => {
+const FileParameters = ({
+  parameters,
+}: Pick<FileContext, 'parameters'>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div
@@ -1168,9 +1288,28 @@ const useFileDetail = ({
   hasMore,
   pageNumber,
   chunks,
-}): useFileDetailProps => {
+}: Pick<
+  FileContext,
+  | 'knowledgeDetailModalInfo'
+  | 'fileId'
+  | 'fileList'
+  | 'setFileList'
+  | 'setFileInfo'
+  | 'setParameters'
+  | 'loadingRef'
+  | 'setLoadingData'
+  | 'setChunks'
+  | 'chunkRef'
+  | 'searchValue'
+  | 'setPageNumber'
+  | 'setHasMore'
+  | 'setSearchValue'
+  | 'hasMore'
+  | 'pageNumber'
+  | 'chunks'
+>): useFileDetailProps => {
   const repoId = useMemo(
-    () => knowledgeDetailModalInfo.repoId,
+    () => String(knowledgeDetailModalInfo.repoId ?? ''),
     [knowledgeDetailModalInfo]
   );
   const tag = useMemo(
@@ -1194,7 +1333,7 @@ const useFileDetail = ({
       fileIds: [fileId],
     };
     getFileSummary(params).then(data => {
-      setFileInfo(data.fileInfoV2);
+      setFileInfo(data.fileInfoV2 ?? { name: '', type: '' });
       setParameters(data);
     });
   }
@@ -1206,7 +1345,7 @@ const useFileDetail = ({
     if (chunkRef.current) {
       chunkRef.current.scrollTop = 0;
     }
-    const params: unknown = {
+    const params = {
       fileIds: [fileId],
       pageNo: 1,
       pageSize: 20,
@@ -1214,7 +1353,7 @@ const useFileDetail = ({
     };
     listKnowledgeByPage(params)
       .then(data => {
-        const newChunks = modifyChunks(data.pageData);
+        const newChunks = modifyChunks(data.pageData ?? []);
         setPageNumber(2);
         setChunks(() => newChunks);
         if (data.totalCount > 20) {
@@ -1265,7 +1404,7 @@ const useFileDetail = ({
     };
     listKnowledgeByPage(params)
       .then(data => {
-        const newChunks = modifyChunks(data.pageData);
+        const newChunks = modifyChunks(data.pageData ?? []);
         if (data.totalCount > chunks.length + 20) {
           setHasMore(true);
         } else {
@@ -1324,14 +1463,14 @@ function FileDetail({
   );
   const [fileList, setFileList] = useState<KnowledgeFileItem[]>([]);
   const [showMore, setShowMore] = useState<boolean>(false);
-  const [fileInfo, setFileInfo] = useState<FileInfo>({} as FileInfo);
+  const [fileInfo, setFileInfo] = useState<FileInfo>({ name: '', type: '' });
   const [searchValue, setSearchValue] = useState<string>('');
-  const [parameters, setParameters] = useState<unknown>({});
+  const [parameters, setParameters] = useState<FileSummary>({});
   const [loadingData, setLoadingData] = useState<boolean>(false);
   const [chunks, setChunks] = useState<ChunkItem[]>([]);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(false);
-  const [currentChunk, setCurrentChunk] = useState<ChunkItem>({} as ChunkItem);
+  const [currentChunk, setCurrentChunk] = useState<ChunkItem | null>(null);
   const [editModal, setEditModal] = useState<boolean>(false);
 
   const {
@@ -1386,7 +1525,7 @@ function FileDetail({
 
   return (
     <>
-      {editModal && (
+      {editModal && currentChunk && (
         <EditChunk
           fileInfo={fileInfo}
           currentChunk={currentChunk}

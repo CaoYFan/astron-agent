@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, memo } from 'react';
 import { FLowCollapse } from '@/components/workflow/ui';
 import Inputs from '@/components/workflow/nodes/components/inputs';
@@ -7,10 +8,10 @@ import { useMemoizedFn } from 'ahooks';
 import MonacoEditor from '@/components/monaco-editor';
 import { useTranslation } from 'react-i18next';
 import ExceptionHandling from '../components/exception-handling';
-import { CodeDetailProps, CodeNodeParam } from '@/components/workflow/types';
+
 import { Icons } from '@/components/workflow/icons';
 
-export const CodeDetail = memo((props: CodeDetailProps) => {
+export const CodeDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
@@ -23,7 +24,7 @@ export const CodeDetail = memo((props: CodeDetailProps) => {
     setCodeIDEADrawerlInfo({ open: true, nodeId: id });
   });
 
-  const nodeParam = useMemo<CodeNodeParam>(() => {
+  const nodeParam = useMemo(() => {
     return data?.nodeParam || {};
   }, [data]);
 
@@ -57,15 +58,17 @@ export const CodeDetail = memo((props: CodeDetailProps) => {
           }
           content={
             <div className="rounded-lg overflow-hidden pt-3 px-3.5 pointer-events-auto global-monaco-editor-python">
-              {React.createElement(MonacoEditor as unknown, {
-                height: '238px',
-                defaultLanguage: 'python',
-                value: nodeParam?.code || '',
-                options: {
+              <MonacoEditor
+                height="238px"
+                defaultLanguage="python"
+                value={nodeParam.code ?? ''}
+                options={{
                   readOnly: true,
-                  readOnlyEditor: t('workflow.nodes.codeNode.readOnlyEditor'),
-                },
-              })}
+                  readOnlyMessage: {
+                    value: t('workflow.nodes.codeNode.readOnlyEditor'),
+                  },
+                }}
+              />
               <p className="mt-2 text-xs text-[#F74E43]">
                 {nodeParam?.codeErrMsg}
               </p>

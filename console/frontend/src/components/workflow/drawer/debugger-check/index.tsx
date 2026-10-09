@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState, useEffect, memo } from 'react';
+import React, { useMemo, useState, useEffect, memo } from 'react';
 import { Drawer } from 'antd';
 import { useTranslation } from 'react-i18next';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
@@ -8,9 +8,7 @@ import { ChatDebuggerContent } from '../chat-debugger';
 import {
   OperationResultProps,
   DrawerStyle,
-  ErrorNode,
   PositionData,
-  ReactFlowNode,
 } from '@/components/workflow/types';
 
 // 从统一的图标管理中导入
@@ -25,8 +23,8 @@ function OperationResult({
   setOpen,
 }: OperationResultProps): React.ReactElement {
   const { t } = useTranslation();
-  const errNodes = useFlowsManager(state => state.errNodes) as ErrorNode[];
-  const checkFlow = useFlowsManager(state => state.checkFlow) as () => void;
+  const errNodes = useFlowsManager(state => state.errNodes);
+  const checkFlow = useFlowsManager(state => state.checkFlow);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodeList = useFlowsManager(state => state.nodeList);
   const setNodeInfoEditDrawerlInfo = useFlowsManager(
@@ -78,7 +76,7 @@ function OperationResult({
     return errNodes?.length !== 0;
   }, [errNodes]);
 
-  const nodeIcon = useMemoizedFn((nodeType: string) => {
+  const nodeIcon = useMemoizedFn((nodeType = '') => {
     let nodeFinallyType = '';
     if (['iteration-node-start', 'loop-node-start'].includes(nodeType)) {
       nodeFinallyType = 'node-start';

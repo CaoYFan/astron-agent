@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import {
   NodeWrapper,
@@ -7,7 +8,7 @@ import {
 } from '@/components/workflow/nodes/node-common';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
-const BaseNode = memo(props => {
+const BaseNode = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { isIteratorChildNode } = useNodeCommon({ id, data });
 

@@ -1,70 +1,23 @@
-import { XYPosition } from 'reactflow';
+import type { WorkflowNodeError } from './domain';
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowInput,
+  WorkflowOutput,
+  WorkflowReference,
+} from './domain';
+
 import React from 'react';
 
-export type NodeType = {
-  id: string;
-  type?: string;
-  position: XYPosition;
-  data: NodeDataType;
-  selected?: boolean;
-};
+export type NodeType = WorkflowNode;
 
-export type NodeDataType = {
-  nodeMeta: {
-    nodeType: string;
-    aliasName: string;
-  };
-  inputs?: Array<InputType>;
-  outputs?: Array<OutputType>;
-  nodeParam: {
-    model: string;
-    domain: string;
-    appId: string;
-    apiKey: string;
-    apiSecret: string;
-    maxTokens: string;
-    uid: string;
-    template: string;
-  };
-  references?: Array<ReferenceType>;
-};
+export type NodeDataType = WorkflowNodeData;
 
-export type InputType = {
-  id: string;
-  name: string;
-  schema: {
-    type: string;
-    value: {
-      type: string;
-      content:
-        | string
-        | {
-            id: string;
-            nodeId: string;
-            name: string;
-          };
-    };
-  };
-};
+export type InputType = WorkflowInput;
 
-export type OutputType = {
-  id: string;
-  name: string;
-  schema: {
-    type: string;
-    value: {
-      type: string;
-      content: string;
-    };
-  };
-};
+export type OutputType = WorkflowOutput;
 
-export type ReferenceType = {
-  id?: string;
-  label: string;
-  value: string;
-  children: ReferenceType;
-};
+export type ReferenceType = WorkflowReference;
 
 export type sourceHandleType = {
   dataType: string;
@@ -85,10 +38,13 @@ export type FlowType = {
   flowId?: string;
   appId?: string;
   id?: string;
-  data?: unknown;
-  publishedData?: unknown;
+  data?: string;
+  publishedData?: string;
+  originData?: string;
   description?: string;
-  updateTime?: unknown;
+  updateTime?: string;
+  createTime?: string;
+  type?: number;
   style?: unknown;
   is_component?: boolean;
   parent?: string;
@@ -105,19 +61,16 @@ export type FlowType = {
   canPublish?: boolean;
   editing?: boolean;
   backgroundPic?: string;
-  advancedConfig?: unknown;
+  advancedConfig?: string;
+  version?: string;
+  bindAiuiAgent?: boolean;
+  inputExampleList?: string[];
+  flowConfig?: string;
+  ext?: string;
+  ioInversion?: { inputs: WorkflowInput[]; outputs: WorkflowOutput[] };
 };
 
-export type ErrNodeType = {
-  id: string;
-  icon: string;
-  name: string | undefined;
-  errorMsg: string;
-  childErrList: ErrNodeType[] | undefined;
-  data?: {
-    label: string;
-  };
-};
+export type ErrNodeType = WorkflowNodeError;
 
 export type ConnectionLineProps = {
   fromX: number;
@@ -167,3 +120,4 @@ export * from './nodes';
 
 // 导出 Components 相关类型
 export * from './components';
+export type { ChatStoreType } from './zustand/chat';

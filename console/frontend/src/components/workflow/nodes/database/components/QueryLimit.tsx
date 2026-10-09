@@ -1,9 +1,11 @@
+import type { ChangeNodeParameter } from '@/components/workflow/nodes/types';
+import type { NodeChildrenProps } from '@/components/workflow/nodes/types';
 import React, { useCallback, useState, memo } from 'react';
 import { cloneDeep } from 'lodash';
 import { FlowInputNumber, FLowCollapse } from '@/components/workflow/ui';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 
-function index({ id, data, children }): React.ReactElement {
+function index({ id, data, children }: NodeChildrenProps): React.ReactElement {
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
   const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
@@ -14,7 +16,7 @@ function index({ id, data, children }): React.ReactElement {
   const [showParams, setShowParams] = useState(true);
 
   // 节点参数改变
-  const handleChangeNodeParam = useCallback(
+  const handleChangeNodeParam = useCallback<ChangeNodeParameter>(
     (fn, value) => {
       setNode(id, old => {
         fn(old.data, value);

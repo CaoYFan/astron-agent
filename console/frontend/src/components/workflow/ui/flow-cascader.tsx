@@ -1,35 +1,48 @@
 import React, { useState, useCallback, memo } from 'react';
-import { Cascader, Empty } from 'antd';
+import { Cascader, Empty, type CascaderProps, type TreeProps } from 'antd';
+import type { WorkflowReference } from '../types/domain';
 import { cn } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import FlowTree from './flow-tree';
 
 import formSelect from '@/assets/imgs/main/icon_nav_dropdown.svg';
 
+type ReferenceOption = WorkflowReference & { disabled?: boolean };
+interface FlowCascaderProps
+  extends CascaderProps<ReferenceOption, 'value', false> {
+  handleTreeSelect: (node: ReferenceOption) => void;
+}
+
 function FlowCascader({
   className = '',
   handleTreeSelect,
   ...reset
-}): React.ReactElement {
+}: FlowCascaderProps): React.ReactElement {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
-  const handleOnSelect = useCallback((_, { node }) => {
-    handleTreeSelect(node);
-    setOpen(false);
-  }, []);
+  const handleOnSelect = useCallback<
+    NonNullable<TreeProps<ReferenceOption>['onSelect']>
+  >(
+    (_, { node }) => {
+      handleTreeSelect(node);
+      setOpen(false);
+    },
+    [handleTreeSelect]
+  );
 
-  const titleRender = useCallback(nodeData => {
-    let type = nodeData?.type;
+  const titleRender = useCallback((nodeData: ReferenceOption) => {
+    let type = nodeData.type ?? '';
     if (type?.includes('array')) {
-      const arr = nodeData?.type?.split('-');
+      const arr = type.split('-');
       if (nodeData?.fileType) {
         type = `Array<${
           nodeData?.fileType?.slice(0, 1).toUpperCase() +
           nodeData?.fileType?.slice(1)
         }>`;
       } else {
-        type = `Array<${arr[1].slice(0, 1).toUpperCase() + arr[1].slice(1)}>`;
+        const itemType = arr[1] ?? '';
+        type = `Array<${itemType.slice(0, 1).toUpperCase() + itemType.slice(1)}>`;
       }
     } else if (nodeData?.fileType) {
       type = nodeData?.fileType;
@@ -44,7 +57,7 @@ function FlowCascader({
     );
   }, []);
 
-  const optionRender = useCallback(option => {
+  const optionRender = useCallback((option: ReferenceOption) => {
     return option?.disabled ? (
       <div className="flex flex-col items-center">
         <Empty />
@@ -60,7 +73,7 @@ function FlowCascader({
       </div>
     ) : (
       <div onClick={e => e.stopPropagation()}>
-        <FlowTree
+        <FlowTree<ReferenceOption>
           fieldNames={{
             key: 'id',
             title: 'label',
@@ -77,7 +90,7 @@ function FlowCascader({
 
   return (
     <div className="w-full overflow-hidden">
-      <Cascader
+      <Cascader<ReferenceOption, 'value'>
         open={open}
         onDropdownVisibleChange={() => setOpen(!open)}
         optionRender={optionRender}

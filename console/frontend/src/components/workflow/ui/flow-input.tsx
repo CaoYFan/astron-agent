@@ -1,7 +1,10 @@
 import React, { useRef, useEffect, memo } from 'react';
 import { cn } from '@/utils';
 
-function FlowInput({ className = '', ...reset }): React.ReactElement {
+function FlowInput({
+  className = '',
+  ...reset
+}: React.InputHTMLAttributes<HTMLInputElement>): React.ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect((): void | (() => void) => {

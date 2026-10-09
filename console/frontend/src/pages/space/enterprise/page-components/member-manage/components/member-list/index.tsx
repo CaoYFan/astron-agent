@@ -9,7 +9,7 @@ import SpaceTable, {
 } from '@/components/space/space-table';
 import { ButtonConfig } from '@/components/button-group';
 import { useSpaceI18n } from '@/pages/space/hooks/use-space-i18n';
-import { ModuleType, OperationType } from '@/types/permission';
+import { ModuleType, OperationType, RoleType } from '@/types/permission';
 import { usePermissions } from '@/hooks/use-permissions';
 import useUserStore from '@/store/user-store';
 
@@ -75,7 +75,8 @@ const MemberList: React.FC<MemberListProps> = ({ searchValue, roleFilter }) => {
   // 获取角色文本
   const getRoleText = useCallback(
     (role: string) => {
-      return roleTextMap[roleToRoleType(Number(role), true)] || role;
+      const labels: Partial<Record<RoleType, string>> = roleTextMap;
+      return labels[roleToRoleType(Number(role), true)] || role;
     },
     [roleTextMap]
   );

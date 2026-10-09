@@ -1,4 +1,15 @@
-import { RpaInfo, RpaNodeParam } from '@/types/rpa';
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowNodeParameters,
+  WorkflowInput,
+  WorkflowOutput,
+  WorkflowReference,
+  ParameterProperty,
+  ParameterSchema,
+} from '../domain';
+import type { WorkflowModel } from '../domain';
+import { RpaNodeParam } from '@/types/rpa';
 import {
   AddNodeType,
   ToolType,
@@ -12,19 +23,7 @@ import React from 'react';
 // Hook 相关类型定义
 
 // useFlowTypeRender Hook 相关类型
-export interface ItemType {
-  fileType?: string;
-  type?: string;
-  schema?: {
-    type?: string;
-    value?: {
-      type?: string;
-      content?: {
-        name?: string;
-      };
-    };
-  };
-}
+export type ItemType = Pick<ParameterProperty, 'fileType' | 'type' | 'schema'>;
 
 // useNodeCommon Hook 相关类型
 export interface NodeCommonProps {
@@ -56,53 +55,43 @@ export interface UseNodeInfoReturn {
   inputs: InputItem[];
   outputs: OutputItem[];
   showNodeOperation: boolean;
-  currentNode?: {
-    id: string;
-    type?: string;
-    data?: NodeDataType;
-    [key: string]: unknown;
-  };
-  nodeParam: Record<string, unknown>;
-  nodeIcon: string;
-  nodeDesciption: string;
-  isThinkModel: boolean;
+  currentNode?: WorkflowNode;
+  nodeParam: WorkflowNodeParameters;
+  nodeIcon?: string;
+  nodeDesciption?: string;
+  isFixedInputsNode: boolean;
+  isRpaNode: boolean;
+  inputLabel: string;
+  outputLabel: string;
+  allowAddInput: boolean;
+  allowAddOutput: boolean;
 }
 
 export interface UseNodeFuncReturn {
   handleNodeClick: () => void;
-  handleChangeNodeParam: (
-    fn: (data: NodeDataType, value: unknown) => void,
-    value: unknown
+  handleChangeNodeParam: <Value>(
+    fn: (data: NodeDataType, value: Value) => void,
+    value: Value
   ) => void;
-  handleChangeOutputParam: (
+  handleChangeOutputParam: <Value>(
     outputId: string,
-    fn: (data: OutputItem, value: unknown) => void,
-    value: unknown
+    fn: (data: PropertyItem, value: Value, nodeData: WorkflowNodeData) => void,
+    value: Value
   ) => void;
   handleIteratorEndChange: (
     type: 'add' | 'remove' | 'replace',
     outputId: string,
     value?: unknown,
-    currentNode?: NodeDataType
+    currentNode?: WorkflowNode
   ) => void;
   handleAddOutputLine: () => void;
   handleRemoveOutputLine: (outputId: string) => void;
-  isFixedOutputComponentFunc: (output: OutputItem) => boolean;
+  isFixedOutputComponentFunc: (output: PropertyItem) => boolean;
 }
 
 export interface UseNodeOutputRenderReturn {
   handleCustomOutputGenerate: () => void;
-  renderOutputComponent: (
-    output: OutputItem,
-    outputs: OutputItem[],
-    reset: {
-      disabled?: boolean;
-      typeStringOnly?: boolean;
-      hasDescription?: boolean;
-      hasRef?: boolean;
-      allowRemove?: boolean;
-    }
-  ) => React.ReactElement;
+  renderOutputComponent: (output: PropertyItem) => React.ReactElement;
   outputTypeList: Array<{
     label: string;
     value: string;
@@ -114,77 +103,22 @@ export interface UseNodeOutputRenderReturn {
 }
 
 export interface UseNodeModelsReturn {
-  models: Array<{
-    llmId?: string;
-    [key: string]: unknown;
-  }>;
-  model: {
-    llmId?: string;
-    [key: string]: unknown;
-  };
+  models: WorkflowModel[];
+  model: WorkflowModel | undefined;
   isThinkModel: boolean;
 }
 
-export interface NodeDataType {
-  nodeParam?: Record<string, unknown>;
-  inputs?: InputItem[];
-  outputs?: OutputItem[];
-  references?: ReferenceItem[];
-  retryConfig?: RetryConfig;
-  parentId?: string;
-}
+export type NodeDataType = WorkflowNodeData;
 
-export interface InputItem {
-  id: string;
-  name: string;
-  schema?: SchemaType;
-  type?: string;
-  required?: boolean;
-}
+export type InputItem = WorkflowInput;
 
-export interface OutputItem {
-  id: string;
-  name: string;
-  schema?: SchemaType;
-  type?: string;
-  required?: boolean;
-  fileType?: string;
-  allowedFileType?: string[];
-  deleteDisabled?: boolean;
-  customParameterType?: string;
-  isChild?: boolean;
-  nameErrMsg?: string;
-  properties?: PropertyItem[];
-}
+export type OutputItem = WorkflowOutput;
 
-export interface PropertyItem {
-  id: string;
-  name: string;
-  type: string;
-  default?: string;
-  required?: boolean;
-  key?: string;
-  isChild?: boolean;
-  title?: React.ReactElement;
-  properties?: PropertyItem[];
-}
+export type PropertyItem = ParameterProperty;
 
-export interface ReferenceItem {
-  id?: string;
-  label: string;
-  value: string;
-}
+export type ReferenceItem = WorkflowReference;
 
-export interface SchemaType {
-  type?: string;
-  default?: string;
-  properties?: PropertyItem[];
-  value?: {
-    type?: string;
-    content?: Record<string, unknown>;
-    contentErrMsg?: string;
-  };
-}
+export type SchemaType = ParameterSchema;
 
 export interface RetryConfig {
   shouldRetry?: boolean;
@@ -193,20 +127,24 @@ export interface RetryConfig {
 }
 
 export interface UseNodeCommonReturn {
+  isFixedInputsNode: boolean;
+  allowNoInputParams: boolean;
+  isLoopNode: boolean;
+  isEndNode: boolean;
   handleNodeClick: () => void;
-  handleChangeNodeParam: (
-    fn: (data: NodeDataType, value: unknown) => void,
-    value: unknown
+  handleChangeNodeParam: <Value>(
+    fn: (data: NodeDataType, value: Value) => void,
+    value: Value
   ) => void;
-  handleChangeInputParam: (
+  handleChangeInputParam: <Value>(
     inputId: string,
-    fn: (data: InputItem, value: unknown) => void,
-    value: unknown
+    fn: (data: InputItem, value: Value, nodeData: WorkflowNodeData) => void,
+    value: Value
   ) => void;
-  handleChangeOutputParam: (
+  handleChangeOutputParam: <Value>(
     outputId: string,
-    fn: (data: OutputItem, value: unknown) => void,
-    value: unknown
+    fn: (data: PropertyItem, value: Value, nodeData: WorkflowNodeData) => void,
+    value: Value
   ) => void;
   handleAddOutputLine: () => void;
   handleRemoveOutputLine: (outputId: string) => void;
@@ -216,26 +154,23 @@ export interface UseNodeCommonReturn {
     schema?: SchemaType;
     type?: string;
   }) => React.ReactElement;
-  renderTypeInput: (output: OutputItem) => React.ReactElement;
+  renderTypeInput: (output: PropertyItem) => React.ReactElement;
   addUniqueComponentToProperties: (schemasArray: OutputItem[]) => OutputItem[];
   renderTypeOneClickUpdate: () => React.ReactElement | null;
   handleAddInputLine: () => void;
   handleRemoveInputLine: (inputId: string) => void;
   nodeType: string;
   isConnectable: boolean;
-  nodeParam: Record<string, unknown>;
+  nodeParam: WorkflowNodeParameters;
   canvasesDisabled: boolean;
   isStartNode: boolean;
   hasTargetHandle: boolean;
   hasSourceHandle: boolean;
   sourceHandleId?: string;
   exceptionHandleId?: string;
-  model?: {
-    llmId?: string;
-    [key: string]: unknown;
-  };
+  model?: WorkflowModel;
   nodeIcon?: string;
-  nodeDesciption: string;
+  nodeDesciption?: string;
   isIteratorStart: boolean;
   isIteratorEnd: boolean;
   isKnowledgeNode: boolean;
@@ -255,16 +190,8 @@ export interface UseNodeCommonReturn {
   inputs: InputItem[];
   outputs: OutputItem[];
   showNodeOperation: boolean;
-  currentNode?: {
-    id: string;
-    type?: string;
-    data?: NodeDataType;
-    [key: string]: unknown;
-  };
-  models: Array<{
-    llmId?: string;
-    [key: string]: unknown;
-  }>;
+  currentNode?: WorkflowNode;
+  models: WorkflowModel[];
   outputTypeList: Array<{
     label: string;
     value: string;
@@ -311,11 +238,11 @@ export interface UseNodeHandleReturn {
 
 export interface UseNodeInputRenderReturn {
   allowNoInputParams: boolean;
-  renderTypeInput: (output: OutputItem) => React.ReactElement;
-  handleChangeInputParam: (
+  renderTypeInput: (output: PropertyItem) => React.ReactElement;
+  handleChangeInputParam: <Value>(
     inputId: string,
-    fn: (data: InputItem, value: unknown) => void,
-    value: unknown
+    fn: (data: InputItem, value: Value, nodeData: WorkflowNodeData) => void,
+    value: Value
   ) => void;
   handleAddInputLine: () => void;
   handleRemoveInputLine: (inputId: string) => void;
@@ -323,10 +250,10 @@ export interface UseNodeInputRenderReturn {
 
 export interface UseVariableMemoryHandlersReturn {
   updateVariableMemoryNodeRef: () => void;
-  handleChangeParam: (
+  handleChangeParam: <Value>(
     outputId: string,
-    fn: (data: InputItem, value: unknown) => void,
-    value: unknown
+    fn: (data: InputItem, value: Value, nodeData: WorkflowNodeData) => void,
+    value: Value
   ) => void;
   handleRemoveInputLine: (inputId: string) => void;
 }

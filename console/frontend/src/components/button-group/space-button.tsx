@@ -68,9 +68,8 @@ const SpaceButton: React.FC<SpaceButtonProps> = ({
   } = config;
   // 检查按钮权限
   const checkButtonPermission = (): boolean => {
-    if (!permission || !effectiveUserRole) {
-      return true; // 没有权限配置或用户角色，默认有权限
-    }
+    if (!permission) return true;
+    if (!effectiveUserRole) return false;
 
     // 自定义权限检查函数
     if (permission.customCheck) {
@@ -113,8 +112,8 @@ const SpaceButton: React.FC<SpaceButtonProps> = ({
       return visible;
     }
 
-    if (typeof visible === 'function' && effectiveUserRole) {
-      return visible(effectiveUserRole);
+    if (typeof visible === 'function') {
+      return effectiveUserRole ? visible(effectiveUserRole) : false;
     }
 
     return true;

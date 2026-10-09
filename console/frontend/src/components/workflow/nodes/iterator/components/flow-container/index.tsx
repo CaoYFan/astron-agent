@@ -1,3 +1,4 @@
+import type { WorkflowNode } from '@/components/workflow/types/domain';
 import React, { useEffect, useCallback, useState } from 'react';
 import { Background, Panel } from 'reactflow';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
@@ -5,7 +6,7 @@ import { useMemoizedFn } from 'ahooks';
 
 import fullScreenIcon from '@/assets/imgs/workflow/full-screen-icon.png';
 
-function index(props): React.ReactElement {
+function index(props: { id: string }): React.ReactElement {
   const { id } = props;
 
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
@@ -27,27 +28,31 @@ function index(props): React.ReactElement {
     height: 0,
   });
 
-  const getDimensions = useCallback(positions => {
-    if (!positions.length) return { width: 0, height: 0 };
+  const getDimensions = useCallback(
+    (positions: Pick<WorkflowNode, 'position'>[]) => {
+      const first = positions[0];
+      if (!first) return { width: 0, height: 0 };
 
-    let minX = positions[0].position.x;
-    let maxX = positions[0].position.x;
-    let minY = positions[0].position.y;
-    let maxY = positions[0].position.y;
+      let minX = first.position.x;
+      let maxX = first.position.x;
+      let minY = first.position.y;
+      let maxY = first.position.y;
 
-    positions.forEach(item => {
-      const { x, y } = item.position;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    });
+      positions.forEach(item => {
+        const { x, y } = item.position;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      });
 
-    const width = (maxX - minX) * 1.2;
-    const height = (maxY - minY) * 1.3 + 60;
+      const width = (maxX - minX) * 1.2;
+      const height = (maxY - minY) * 1.3 + 60;
 
-    return { width, height };
-  }, []);
+      return { width, height };
+    },
+    []
+  );
 
   useEffect(() => {
     const iterationNodes = nodes?.filter(node => node?.data?.parentId === id);

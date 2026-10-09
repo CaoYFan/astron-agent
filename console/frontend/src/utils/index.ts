@@ -1,7 +1,7 @@
+import type { KnowledgeItem, Chunk } from '@/types/resource';
 import qs from 'qs';
 import { message } from 'antd';
-import { localeConfig } from '@/locales/localeConfig';
-import { getLanguageCode } from '@/utils/http';
+
 import { v4 as uuid } from 'uuid';
 import clsx, { ClassValue } from 'clsx';
 import {
@@ -92,7 +92,6 @@ const copyText = async (options: {
   origin?: boolean;
   successText?: string;
 }) => {
-  const languageCode = getLanguageCode();
   const props = { origin: true, ...options };
   const typeList = [
     'metadata',
@@ -172,7 +171,7 @@ const isJSON = (str: string): boolean => {
  * 文件类型获取
  */
 const fileType = (file: {
-  isFile: boolean;
+  isFile: boolean | number;
   fileInfoV2?: { type?: string };
 }): string => {
   return file.isFile ? (file.fileInfoV2?.type ?? 'unknown') : 'folder';
@@ -181,28 +180,14 @@ const fileType = (file: {
 /**
  * 修改 chunks
  */
-function modifyChunks(
-  chunks: Array<{
-    content: {
-      content?: string;
-      knowledge?: string;
-      references?: Record<
-        string,
-        { format?: string; link?: string; content?: string }
-      >;
-      auditSuggest?: unknown;
-      auditDetail?: Array<{ category_description: string }>;
-    };
-    [key: string]: unknown;
-  }>
-): Record<string, unknown>[] {
+function modifyChunks(chunks: KnowledgeItem[]): Chunk[] {
   return chunks.map(item => ({
     ...item,
     markdownContent: modifyContent(item.content),
     content: item.content?.content || item.content?.knowledge,
     auditSuggest: item.content?.auditSuggest,
     auditDetail: item.content?.auditDetail
-      ?.map((d: Record<string, string>) => d['category_description'])
+      ?.map(d => d.category_description)
       ?.join(','),
   }));
 }
@@ -748,7 +733,7 @@ const isPureText = (text: string): boolean => {
   return true;
 };
 
-const splitSentencesBasic = text => {
+const splitSentencesBasic = (text: string): string[] => {
   // 1. 正则匹配“，。？！”，用分组捕获“句子+标点”（避免拆分标点）
   // \s* 匹配标点前可能的空格（如“你好 。”）
   const regex = /([^，。？！；,!?;]*[，。？！；,!?;])/g;
@@ -758,7 +743,7 @@ const splitSentencesBasic = text => {
   return sentences;
 };
 
-function getProcessedStr(strArr) {
+function getProcessedStr(strArr: string[]): string {
   // 边界处理1：输入不是数组，返回空字符串
   if (!Array.isArray(strArr)) {
     console.warn('输入不是数组，请传入字符串数组');
@@ -783,7 +768,7 @@ function getProcessedStr(strArr) {
     let prefixCombined = ''; // 前面元素的拼接结果
 
     for (let i = 0; i < processedArr.length; i++) {
-      const currentStr = processedArr[i];
+      const currentStr = processedArr[i] ?? '';
       const currentLen = currentStr.length;
 
       // 关键判断：加上当前元素长度后是否≥2000
@@ -800,7 +785,7 @@ function getProcessedStr(strArr) {
     return prefixCombined;
   } else {
     // 步骤3：总长度<2000，判断最后一个元素的结尾字符
-    const lastStr = processedArr[processedArr.length - 1]; // 最后一个元素（已转为字符串）
+    const lastStr = processedArr[processedArr.length - 1] ?? ''; // 最后一个元素（已转为字符串）
     // 定义合法结尾字符：，。？！,!?（注意中英文标点区分）
     const validEndChars = ['，', '。', '？', '！', ',', '!', '?', ';', '；'];
     // 获取最后一个字符（处理空字符串情况：lastStr为空时charAt(0)也为空）
@@ -816,7 +801,11 @@ function getProcessedStr(strArr) {
     }
   }
 }
-function processStringByChunk(str, chunkSize = 200, handleChunk) {
+function processStringByChunk(
+  str: string,
+  chunkSize = 200,
+  handleChunk: (chunk: string, index?: number, total?: number) => void
+): void {
   // 1. 边界判断：若字符串为空或未传入处理函数，直接返回
   if (!str || typeof handleChunk !== 'function') return;
 

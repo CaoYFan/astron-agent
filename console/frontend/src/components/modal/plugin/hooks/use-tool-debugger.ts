@@ -20,11 +20,11 @@ interface BaseFormData {
 export const useToolDebugger = ({
   currentToolInfo,
   offical = false,
-  selectedCard = {} as ToolItem,
+  selectedCard = {},
 }: {
-  currentToolInfo: ToolItem;
+  currentToolInfo: Partial<ToolItem>;
   offical: boolean;
-  selectedCard: ToolItem;
+  selectedCard: Partial<ToolItem>;
 }): {
   handleDebuggerTool: () => void;
   debuggerJsonData: string;
@@ -47,7 +47,7 @@ export const useToolDebugger = ({
 
   const currentToolId = currentToolInfo?.id;
 
-  const handleResetFormData = (data: ToolItem): void => {
+  const handleResetFormData = (data: Partial<ToolItem>): void => {
     let baseFormParams: BaseFormData = {
       name: data?.name,
       description: data?.description,
@@ -82,8 +82,8 @@ export const useToolDebugger = ({
         toolRequestOutput: paramsData?.toolRequestOutput as InputParamsData[],
       });
     } else if (currentToolInfo?.id) {
-      const paramsData = isJSON(currentToolInfo?.webSchema)
-        ? JSON.parse(currentToolInfo?.webSchema)
+      const paramsData = isJSON(currentToolInfo?.webSchema || '')
+        ? JSON.parse(currentToolInfo?.webSchema || '{}')
         : {};
       handleResetFormData({
         ...currentToolInfo,

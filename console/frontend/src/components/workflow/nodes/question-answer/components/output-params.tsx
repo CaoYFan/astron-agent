@@ -1,3 +1,23 @@
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { WorkflowOutput } from '@/components/workflow/types/domain';
+type OutputContext = NodePropsFor<
+  | 'id'
+  | 'data'
+  | 'handleChangeOutputParam'
+  | 'delayCheckNode'
+  | 'setDefaultValueModalInfo'
+  | 'handleRemoveOutputLine'
+> & {
+  item: WorkflowOutput;
+  output: WorkflowOutput;
+  fixedOutputs: WorkflowOutput[];
+  extractionOutputs: WorkflowOutput[];
+  focusTextareaId: string;
+  setFocusTextareaId: React.Dispatch<React.SetStateAction<string>>;
+};
+type OutputPropsFor<Key extends keyof OutputContext> = Pick<OutputContext, Key>;
+
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, useState } from 'react';
 import { Checkbox } from 'antd';
 import {
@@ -54,7 +74,9 @@ export const RenderInput = ({
   item,
   setDefaultValueModalInfo,
   handleChangeOutputParam,
-}): React.ReactElement => {
+}: OutputPropsFor<
+  'id' | 'item' | 'setDefaultValueModalInfo' | 'handleChangeOutputParam'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const type = item?.schema?.type;
 
@@ -64,11 +86,15 @@ export const RenderInput = ({
         nodeId={id}
         maxLength={30}
         className="w-full"
-        value={item?.schema?.default}
+        value={
+          typeof item.schema.default === 'string' ? item.schema.default : ''
+        }
         onChange={value =>
           handleChangeOutputParam(
             item?.id,
-            (data, v) => (data.schema.default = v),
+            (data, v) => {
+              if (data.schema) data.schema.default = v;
+            },
             value
           )
         }
@@ -80,15 +106,21 @@ export const RenderInput = ({
       <FlowSelect
         placeholder={t('workflow.nodes.common.selectPlaceholder')}
         options={[
-          { label: 'true', value: true },
-          { label: 'false', value: false },
+          { label: 'true', value: 'true' },
+          { label: 'false', value: 'false' },
         ]}
-        value={item?.schema?.default}
+        value={
+          typeof item.schema.default === 'boolean'
+            ? String(item.schema.default)
+            : undefined
+        }
         onChange={value =>
           handleChangeOutputParam(
             item?.id,
-            (data, v) => (data.schema.default = v),
-            value
+            (data, v) => {
+              if (data.schema) data.schema.default = v;
+            },
+            value === 'true'
           )
         }
       />
@@ -100,11 +132,15 @@ export const RenderInput = ({
         className="w-full flow-node-inputNumber-white"
         step={1}
         precision={0}
-        value={item?.schema?.default}
+        value={
+          typeof item.schema.default === 'number' ? item.schema.default : null
+        }
         onChange={value =>
           handleChangeOutputParam(
             item?.id,
-            (data, v) => (data.schema.default = v),
+            (data, v) => {
+              if (data.schema) data.schema.default = v;
+            },
             value
           )
         }
@@ -116,11 +152,15 @@ export const RenderInput = ({
       <FlowInputNumber
         className="w-full flow-node-inputNumber-white"
         placeholder={t('workflow.nodes.common.inputPlaceholder')}
-        value={item?.schema?.default}
+        value={
+          typeof item.schema.default === 'number' ? item.schema.default : null
+        }
         onChange={value =>
           handleChangeOutputParam(
             item?.id,
-            (data, v) => (data.schema.default = v),
+            (data, v) => {
+              if (data.schema) data.schema.default = v;
+            },
             value
           )
         }
@@ -152,7 +192,14 @@ export const RenderTypeInput = ({
   setFocusTextareaId,
   handleChangeOutputParam,
   delayCheckNode,
-}): React.ReactElement => (
+}: OutputPropsFor<
+  | 'id'
+  | 'output'
+  | 'focusTextareaId'
+  | 'setFocusTextareaId'
+  | 'handleChangeOutputParam'
+  | 'delayCheckNode'
+>): React.ReactElement => (
   <FlowNodeTextArea
     allowWheel={false}
     placeholder="请输入变量描述"
@@ -167,7 +214,9 @@ export const RenderTypeInput = ({
     onChange={value =>
       handleChangeOutputParam(
         output.id,
-        (data, v) => (data.schema.description = v),
+        (data, v) => {
+          if (data.schema) data.schema.description = v;
+        },
         value
       )
     }
@@ -179,7 +228,9 @@ export const RenderTypeInput = ({
   />
 );
 
-const FixedOutputs = ({ fixedOutputs }): React.ReactElement => {
+const FixedOutputs = ({
+  fixedOutputs,
+}: OutputPropsFor<'fixedOutputs'>): React.ReactElement | null => {
   if (!fixedOutputs?.length) return null;
 
   return (
@@ -217,7 +268,16 @@ const ExtractionOutputs = ({
   setDefaultValueModalInfo,
   handleRemoveOutputLine,
   delayCheckNode,
-}): React.ReactElement => {
+}: OutputPropsFor<
+  | 'extractionOutputs'
+  | 'id'
+  | 'handleChangeOutputParam'
+  | 'focusTextareaId'
+  | 'setFocusTextareaId'
+  | 'setDefaultValueModalInfo'
+  | 'handleRemoveOutputLine'
+  | 'delayCheckNode'
+>): React.ReactElement | null => {
   if (!extractionOutputs?.length) return null;
 
   const currentStore = useFlowsManager(state => state.getCurrentStore());
@@ -258,6 +318,7 @@ const ExtractionOutputs = ({
                   handleChangeOutputParam(
                     item?.id,
                     (data, value) => {
+                      if (!data.schema) return;
                       data.schema.type = value;
                       data.schema.default = generateTypeDefault(value);
                     },
@@ -324,7 +385,7 @@ const ExtractionOutputs = ({
   );
 };
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const {
     handleChangeOutputParam,
     handleAddOutputLine,

@@ -503,7 +503,7 @@ function index() {
               onScroll={handleScroll}
             >
               <div className="grid lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-3 3xl:grid-cols-3 gap-6 items-end">
-                {robots.map((k: any, index) => (
+                {robots.map((k: any, index: number) => (
                   <div
                     className={`common-card-item group h-[162px] ${styles.angentItemBox}`}
                     key={k.botId}
@@ -648,9 +648,10 @@ function index() {
                                           item.fileType !== 'file'
                                       )
                                   ) {
-                                    return message.info(
+                                    message.info(
                                       t('agentPage.agentPage.notSupportedChat')
                                     );
+                                    return;
                                   }
                                   handleToChat(k.botId);
                                 }

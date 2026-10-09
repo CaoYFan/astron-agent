@@ -1,9 +1,10 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo } from 'react';
 import { FLowCollapse, FLowTree } from '@/components/workflow/ui';
 import { useTranslation } from 'react-i18next';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { titleRender, outputs } = useNodeCommon({ id, data });
   const { t } = useTranslation();
   const treeData = useMemo(() => {

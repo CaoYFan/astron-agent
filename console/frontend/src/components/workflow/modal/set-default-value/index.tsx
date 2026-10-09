@@ -5,7 +5,7 @@ import { cloneDeep } from 'lodash';
 import { Button } from 'antd';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import JsonMonacoEditor from '@/components/monaco-editor/JsonMonacoEditor';
-import Ajv from 'ajv';
+import Ajv, { type AnySchema } from 'ajv';
 import { generateValidationSchema } from '@/components/workflow/utils/reactflowUtils';
 import { Icons } from '@/components/workflow/icons';
 
@@ -22,7 +22,7 @@ function SetDefaultValue(): React.ReactElement {
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const validationSchema = useMemo(() => {
-    if (defaultValueModalInfo?.nodeId) {
+    if (defaultValueModalInfo?.nodeId && defaultValueModalInfo.data) {
       return generateValidationSchema(defaultValueModalInfo?.data);
     }
     return {};
@@ -31,15 +31,16 @@ function SetDefaultValue(): React.ReactElement {
   useEffect(() => {
     if (defaultValueModalInfo?.open) {
       setValue(
-        JSON.stringify(defaultValueModalInfo?.data?.schema?.default, null, 2)
+        JSON.stringify(defaultValueModalInfo?.data?.schema?.default, null, 2) ??
+          ''
       );
     }
   }, [defaultValueModalInfo]);
 
   const handleOk = useMemoizedFn(() => {
-    setNode(defaultValueModalInfo?.nodeId, (old: unknown) => {
+    setNode(defaultValueModalInfo.nodeId, old => {
       const currentInput = old.data?.outputs.find(
-        (item: unknown) => item.id === defaultValueModalInfo?.paramsId
+        item => item.id === defaultValueModalInfo.paramsId
       );
       if (currentInput) {
         currentInput.schema.default = JSON.parse(value);
@@ -56,7 +57,7 @@ function SetDefaultValue(): React.ReactElement {
   });
 
   const validateInputJSON = useMemoizedFn(
-    (newValue: string, schema: unknown): string => {
+    (newValue: string, schema: AnySchema): string => {
       try {
         const ajv = new Ajv();
         const jsonData = JSON.parse(newValue);
@@ -77,7 +78,7 @@ function SetDefaultValue(): React.ReactElement {
     }
   );
 
-  const handleInputChange = useMemoizedFn((value: string) => {
+  const handleInputChange = useMemoizedFn((value = '') => {
     setValue(value);
     setErrorMsg(validateInputJSON(value, validationSchema));
   });

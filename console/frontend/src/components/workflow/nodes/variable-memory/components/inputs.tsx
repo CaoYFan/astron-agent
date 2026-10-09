@@ -1,3 +1,25 @@
+import type {
+  NodeComponentProps,
+  ChangeInputParameter,
+} from '@/components/workflow/nodes/types';
+import { inputReference } from '@/components/workflow/nodes/types';
+import type {
+  WorkflowInput,
+  WorkflowNode,
+  WorkflowReference,
+} from '@/components/workflow/types/domain';
+type MemoryInputContext = NodeComponentProps & {
+  item: WorkflowInput;
+  currentNodes: WorkflowNode[];
+  references: WorkflowReference[];
+  handleChangeParam: ChangeInputParameter;
+  updateVariableMemoryNodeRef: () => void;
+};
+type MemoryInputPropsFor<Key extends keyof MemoryInputContext> = Pick<
+  MemoryInputContext,
+  Key
+>;
+
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,7 +39,9 @@ const NameInput = ({
   item,
   handleChangeParam,
   updateVariableMemoryNodeRef,
-}): React.ReactElement => {
+}: MemoryInputPropsFor<
+  'id' | 'item' | 'handleChangeParam' | 'updateVariableMemoryNodeRef'
+>): React.ReactElement => {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const delayCheckNode = currentStore(state => state.delayCheckNode);
 
@@ -37,7 +61,10 @@ const NameInput = ({
   );
 };
 
-const TypeSelect = ({ item, handleChangeParam }): React.ReactElement => {
+const TypeSelect = ({
+  item,
+  handleChangeParam,
+}: MemoryInputPropsFor<'item' | 'handleChangeParam'>): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -51,8 +78,10 @@ const TypeSelect = ({ item, handleChangeParam }): React.ReactElement => {
         handleChangeParam(
           item?.id,
           (data, value) => {
-            data.schema.value.type = value;
-            data.schema.value.content = value === 'literal' ? '' : {};
+            data.schema.value =
+              value === 'literal'
+                ? { ...data.schema.value, type: 'literal', content: '' }
+                : { ...data.schema.value, type: 'ref', content: {} };
           },
           value
         )
@@ -66,10 +95,17 @@ const LiteralInput = ({
   item,
   handleChangeParam,
   updateVariableMemoryNodeRef,
-}): React.ReactElement => (
+}: MemoryInputPropsFor<
+  'id' | 'item' | 'handleChangeParam' | 'updateVariableMemoryNodeRef'
+>): React.ReactElement => (
   <FlowNodeInput
     nodeId={id}
-    value={item?.schema?.value?.content}
+    value={
+      item.schema.value.type === 'literal' &&
+      typeof item.schema.value.content === 'string'
+        ? item.schema.value.content
+        : ''
+    }
     onChange={value =>
       handleChangeParam(
         item?.id,
@@ -87,18 +123,22 @@ const RefInput = ({
   references,
   handleChangeParam,
   updateVariableMemoryNodeRef,
-}): React.ReactElement => {
+}: MemoryInputPropsFor<
+  | 'id'
+  | 'item'
+  | 'references'
+  | 'handleChangeParam'
+  | 'updateVariableMemoryNodeRef'
+>): React.ReactElement => {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const checkNode = currentStore(state => state.checkNode);
+  const reference = inputReference(item);
 
   return (
     <FlowCascader
       value={
-        item?.schema?.value?.content?.nodeId
-          ? [
-              item?.schema?.value?.content?.nodeId,
-              item?.schema?.value?.content?.name,
-            ]
+        reference?.nodeId && reference.name
+          ? [reference.nodeId, reference.name]
           : []
       }
       options={references}
@@ -107,7 +147,7 @@ const RefInput = ({
           item?.id,
           (data, value) => {
             data.schema.value.content = value.content;
-            data.schema.type = value.type;
+            data.schema.type = value.type ?? data.schema.type;
             data.fileType = value.fileType;
           },
           {
@@ -135,7 +175,13 @@ const ValueInput = ({
   references,
   handleChangeParam,
   updateVariableMemoryNodeRef,
-}): React.ReactElement => {
+}: MemoryInputPropsFor<
+  | 'id'
+  | 'item'
+  | 'references'
+  | 'handleChangeParam'
+  | 'updateVariableMemoryNodeRef'
+>): React.ReactElement => {
   if (item?.schema?.value?.type === 'literal') {
     return (
       <LiteralInput
@@ -163,7 +209,9 @@ export const InputItem = ({
   currentNodes,
   id,
   data,
-}): React.ReactElement => {
+}: MemoryInputPropsFor<
+  'item' | 'currentNodes' | 'id' | 'data'
+>): React.ReactElement => {
   const { references, inputs } = useNodeCommon({ id, data });
   const {
     handleChangeParam,
@@ -223,7 +271,11 @@ export const InputItem = ({
   );
 };
 
-function index({ id, data, currentNodes }): React.ReactElement {
+function index({
+  id,
+  data,
+  currentNodes,
+}: MemoryInputPropsFor<'id' | 'data' | 'currentNodes'>): React.ReactElement {
   const { inputs, handleAddInputLine } = useNodeCommon({
     id,
     data,

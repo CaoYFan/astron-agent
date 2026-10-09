@@ -1,3 +1,12 @@
+import type {
+  WorkflowNode,
+  WorkflowSnapshot,
+} from '@/components/workflow/types/domain';
+import {
+  iteratorCanvasNodes,
+  leftmostPosition,
+  workflowSelection,
+} from './graph-state';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -11,13 +20,10 @@ import ReactFlow, {
   updateEdge,
   Panel,
   OnMove,
-  Node,
-  XYPosition,
 } from 'reactflow';
 import {
   ConnectionLineProps,
   FlowContainerProps,
-  useIterativeAmplificationProps,
 } from '@/components/workflow/types';
 import { message } from 'antd';
 import NodeList from '@/pages/workflow/components/node-list';
@@ -75,10 +81,23 @@ const ConnectionLineComponent = ({
   );
 };
 
+interface KeyboardHandlerProps {
+  lastSelection: WorkflowSnapshot | null;
+  startIterativeWorkflowKeydownEvent: boolean;
+}
+
+interface IterativeAmplificationProps {
+  lastSelection: WorkflowSnapshot | null;
+  setLastSelection: React.Dispatch<
+    React.SetStateAction<WorkflowSnapshot | null>
+  >;
+  handleAddNode: FlowContainerProps['handleAddNode'];
+}
+
 const useKeyboardHandlers = ({
   lastSelection,
   startIterativeWorkflowKeydownEvent,
-}): void => {
+}: KeyboardHandlerProps): void => {
   const position = useRef({ x: 0, y: 0 });
   const takeSnapshot = useIteratorFlowStore(state => state.takeSnapshot);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
@@ -90,8 +109,9 @@ const useKeyboardHandlers = ({
   const paste = currentStore(state => state.paste);
   const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
   const handleDelete = useMemoizedFn((): void => {
+    if (!lastSelection) return;
     takeSnapshot();
-    lastSelection.nodes = lastSelection?.nodes?.filter(
+    const deletableNodes = lastSelection.nodes.filter(
       node =>
         node.nodeType !== 'iteration-node-start' &&
         node.nodeType !== 'iteration-node-end' &&
@@ -109,13 +129,13 @@ const useKeyboardHandlers = ({
         removeNodeRef(edge.source, edge.target);
       }
     });
-    lastSelection?.nodes?.map(node => deleteNode(node?.id));
+    deletableNodes.forEach(node => deleteNode(node.id));
     setEdges(edges => edges.filter(edge => !edgeIds?.includes(edge?.id)));
     canPublishSetNot();
   });
 
   useEffect((): void | (() => void) => {
-    const handleKeyDown = async (event: KeyboardEvent): void => {
+    const handleKeyDown = async (event: KeyboardEvent): Promise<void> => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
         undo();
@@ -142,7 +162,7 @@ const useKeyboardHandlers = ({
           );
           message.success('复制成功');
         } catch (err) {
-          message.error('[Clipboard] 复制失败', err);
+          message.error('[Clipboard] 复制失败');
         }
       } else if (
         (event.ctrlKey || event.metaKey) &&
@@ -179,7 +199,7 @@ const useIterativeAmplification = ({
   lastSelection,
   setLastSelection,
   handleAddNode,
-}): useIterativeAmplificationProps => {
+}: IterativeAmplificationProps) => {
   const dropZoneRef = useRef<HTMLDivElement | null>(null);
   const setFlowNodes = useFlowStore(state => state.setNodes);
   const setFlowEdges = useFlowStore(state => state.setEdges);
@@ -198,7 +218,7 @@ const useIterativeAmplification = ({
   const reactFlowInstance = useIteratorFlowStore(
     state => state.reactFlowInstance
   );
-  const beforeNodes = useRef<Node[]>([]);
+  const beforeNodes = useRef<WorkflowNode[]>([]);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
   const edges = currentStore(state => state.edges);
@@ -224,6 +244,7 @@ const useIterativeAmplification = ({
       zoom: 1,
     };
     const zoom = 1 / viewPoint.zoom;
+    if (!willAddNode) return;
     handleAddNode(willAddNode, {
       x: (x - viewPoint.x) * zoom,
       y: (y - viewPoint.y) * zoom,
@@ -246,7 +267,7 @@ const useIterativeAmplification = ({
 
   const onSelectionChange = useMemoizedFn(
     (flow: OnSelectionChangeParams): void => {
-      setLastSelection(flow);
+      setLastSelection(workflowSelection(flow, currentStore.getState()));
     }
   );
 
@@ -274,56 +295,46 @@ const useIterativeAmplification = ({
     }
   );
 
-  const getDimensions = useMemoizedFn(
-    (positions: Node[]): XYPosition | undefined => {
-      if (!positions.length) return null;
-      let minXPosition = positions[0];
-
+  const getOffsetY = useMemoizedFn(
+    (y: number, positions: WorkflowNode[]): number => {
+      let offsetY = 0;
       positions.forEach(item => {
-        if (item.position.x < minXPosition.position.x) {
-          minXPosition = item;
+        if (y - item.position.y > offsetY) {
+          offsetY = y - item.position.y;
         }
       });
-      return minXPosition?.position;
+      return offsetY;
     }
   );
 
-  const getOffsetY = useMemoizedFn((y: number, positions: Node[]): number => {
-    let offsetY = 0;
-    positions.forEach(item => {
-      if (y - item.position.y > offsetY) {
-        offsetY = y - item.position.y;
-      }
-    });
-    return offsetY;
-  });
-
   const addNodeToFlow = useMemoizedFn((): void => {
     const nodeIds = beforeNodes?.current?.map(node => node?.id);
-    const basePosition = getDimensions(nodes);
+    const basePosition = leftmostPosition(nodes);
     const offsetY = getOffsetY(basePosition?.y || 0, nodes);
     setShowIterativeModal(false);
     setCurrentStore('flow');
     setFlowNodes(flowNodes =>
       cloneDeep([
         ...flowNodes.filter(node => node?.data?.parentId !== iteratorId),
-        ...nodes.map(node => ({
-          ...node,
-          parentId: iteratorId,
-          extent: 'parent',
-          zIndex: 1,
-          draggable: false,
-          position: generateIteratorPosition(
-            basePosition || { x: 0, y: 0 },
-            node?.position,
-            offsetY
-          ),
-          data: {
-            ...node.data,
-            originPosition: node?.position,
+        ...nodes.map(
+          (node): WorkflowNode => ({
+            ...node,
             parentId: iteratorId,
-          },
-        })),
+            extent: 'parent',
+            zIndex: 1,
+            draggable: false,
+            position: generateIteratorPosition(
+              basePosition || { x: 0, y: 0 },
+              node?.position,
+              offsetY
+            ),
+            data: {
+              ...node.data,
+              originPosition: node?.position,
+              parentId: iteratorId,
+            },
+          })
+        ),
       ])
     );
     setFlowEdges(flowEdges =>
@@ -391,8 +402,9 @@ function FlowContainer({
   const iteratorId = useFlowsManager(state => state.iteratorId);
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   const controlMode = useFlowsManager(state => state.controlMode);
-  const [lastSelection, setLastSelection] =
-    useState<OnSelectionChangeParams | null>(null);
+  const [lastSelection, setLastSelection] = useState<WorkflowSnapshot | null>(
+    null
+  );
   useKeyboardHandlers({
     lastSelection,
     startIterativeWorkflowKeydownEvent,
@@ -415,20 +427,11 @@ function FlowContainer({
 
   useEffect(() => {
     if (iteratorId) {
-      const nodes = flowNodes
-        .filter(node => node?.data?.parentId === iteratorId)
-        .map(node => ({
-          ...node,
-          draggable: !canvasesDisabled,
-          position: node?.data?.originPosition,
-          data: {
-            ...node?.data,
-            parentId: '',
-          },
-          parentId: '',
-          extent: undefined,
-          zIndex: 0,
-        }));
+      const nodes = iteratorCanvasNodes(
+        flowNodes,
+        iteratorId,
+        canvasesDisabled
+      );
       const nodeIds = nodes.map(node => node?.id);
       const edges = flowEdges.filter(
         edge =>

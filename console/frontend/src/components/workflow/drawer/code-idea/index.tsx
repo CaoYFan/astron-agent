@@ -13,7 +13,6 @@ import { useMemoizedFn } from 'ahooks';
 import JsonMonacoEditor from '@/components/monaco-editor/JsonMonacoEditor';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
-import { useAICodeInputBoxProps } from '@/components/workflow/types';
 
 // 类型导入
 import {
@@ -33,6 +32,34 @@ import { Icons } from '@/components/workflow/icons';
 // 获取 Code IDEA 模块的图标
 const icons = Icons.codeIdea;
 
+interface CodeContext extends IOTestPanelProps {
+  setShowPythonPackageModal: (show: boolean) => void;
+  canvasesDisabled: boolean;
+  temporaryStorageCode: React.MutableRefObject<string>;
+  value: string;
+  setAiCodeInputShow: (show: boolean) => void;
+  aiCodeInputShow: boolean;
+  editorRef: React.RefObject<React.ElementRef<typeof MonacoEditor>>;
+  handleChangeNodeParam: ReturnType<
+    typeof useNodeCommon
+  >['handleChangeNodeParam'];
+  inputs: ReturnType<typeof useNodeCommon>['inputs'];
+  isReciving: boolean;
+  wsMessageStatus: React.MutableRefObject<string>;
+  setUserWheel: (scrolling: boolean) => void;
+  setIsReciving: (receiving: boolean) => void;
+  setGenerateAIcode: (generated: boolean) => void;
+  generateAIcode: boolean;
+  prompt: string;
+  setRePrompt: (prompt: string) => void;
+  rePrompt: string;
+  setPrompt: (prompt: string) => void;
+  textQueue: React.MutableRefObject<string[]>;
+  controllerRef: React.MutableRefObject<AbortController | null>;
+  userWheel: boolean;
+  open: boolean;
+}
+
 const CodeIDEAHeader = ({
   setShowPythonPackageModal,
   canvasesDisabled,
@@ -40,7 +67,15 @@ const CodeIDEAHeader = ({
   value,
   setAiCodeInputShow,
   aiCodeInputShow,
-}): React.ReactElement => {
+}: Pick<
+  CodeContext,
+  | 'setShowPythonPackageModal'
+  | 'canvasesDisabled'
+  | 'temporaryStorageCode'
+  | 'value'
+  | 'setAiCodeInputShow'
+  | 'aiCodeInputShow'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const setCodeIDEADrawerlInfo = useFlowsManager(
     state => state.setCodeIDEADrawerlInfo
@@ -102,15 +137,21 @@ const CodeEditor = ({
   value,
   canvasesDisabled,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: Pick<
+  CodeContext,
+  'editorRef' | 'value' | 'canvasesDisabled' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   return (
     <div className="flex-1 global-monaco-editor-python">
       <MonacoEditor
         ref={editorRef}
         defaultLanguage="python"
         value={value}
-        onChange={(val: string) =>
-          handleChangeNodeParam((data, v) => (data.nodeParam.code = v), val)
+        onChange={val =>
+          handleChangeNodeParam(
+            (data, v) => (data.nodeParam.code = v),
+            val ?? ''
+          )
         }
         options={{
           readOnly: canvasesDisabled,
@@ -139,13 +180,30 @@ const useAICodeInputBox = ({
   errCodeMsg,
   textQueue,
   controllerRef,
-}): useAICodeInputBoxProps => {
+}: Pick<
+  CodeContext,
+  | 'value'
+  | 'inputs'
+  | 'isReciving'
+  | 'wsMessageStatus'
+  | 'editorRef'
+  | 'setUserWheel'
+  | 'setIsReciving'
+  | 'setGenerateAIcode'
+  | 'prompt'
+  | 'setRePrompt'
+  | 'setPrompt'
+  | 'handleChangeNodeParam'
+  | 'errCodeMsg'
+  | 'textQueue'
+  | 'controllerRef'
+>) => {
   const { t } = useTranslation();
   const extractInputs = useMemoizedFn((functionString: string): string[] => {
     const pattern = /\((.*?)\)/;
     const match = functionString.match(pattern);
 
-    if (match) {
+    if (match?.[1]) {
       return match[1].replace(/\s+/g, '').split(',');
     }
     return [];
@@ -255,7 +313,28 @@ const AICodeInputBox = ({
   errCodeMsg,
   textQueue,
   controllerRef,
-}): React.ReactElement => {
+}: Pick<
+  CodeContext,
+  | 'value'
+  | 'inputs'
+  | 'isReciving'
+  | 'wsMessageStatus'
+  | 'editorRef'
+  | 'setUserWheel'
+  | 'setIsReciving'
+  | 'setGenerateAIcode'
+  | 'prompt'
+  | 'setRePrompt'
+  | 'setPrompt'
+  | 'handleChangeNodeParam'
+  | 'setAiCodeInputShow'
+  | 'temporaryStorageCode'
+  | 'generateAIcode'
+  | 'rePrompt'
+  | 'errCodeMsg'
+  | 'textQueue'
+  | 'controllerRef'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const { handleAiCode, handleSendMessage } = useAICodeInputBox({
     value,
@@ -458,7 +537,7 @@ const IOTestPanel = ({
     const inputObject = JSON.parse(input);
     const variables: Array<{ name: string; content: unknown }> = [];
     for (const key in inputObject) {
-      if (Object.hasOwn(inputObject, key)) {
+      if (Object.prototype.hasOwnProperty.call(inputObject, key)) {
         variables.push({
           name: key,
           content: inputObject[key],
@@ -532,7 +611,10 @@ const IOTestPanel = ({
               </div>
             </div>
           </div>
-          <JsonMonacoEditor value={input} onChange={value => setInput(value)} />
+          <JsonMonacoEditor
+            value={input}
+            onChange={value => setInput(value ?? '')}
+          />
         </div>
         <div
           className="flex-1 bg-[#25252C] rounded-lg p-5 h-full"
@@ -575,7 +657,7 @@ const IOTestPanel = ({
           ) : (
             <JsonMonacoEditor
               value={output}
-              onChange={value => setOutput(value)}
+              onChange={value => setOutput(value ?? '')}
             />
           )}
         </div>
@@ -595,7 +677,19 @@ const useCodeIDEAEffect = ({
   userWheel,
   value,
   open,
-}): void => {
+}: Pick<
+  CodeContext,
+  | 'editorRef'
+  | 'textQueue'
+  | 'wsMessageStatus'
+  | 'isReciving'
+  | 'setIsReciving'
+  | 'setGenerateAIcode'
+  | 'handleChangeNodeParam'
+  | 'userWheel'
+  | 'value'
+  | 'open'
+>): void => {
   useEffect(() => {
     const handleKeyDown = (e: Event): void =>
       (e as KeyboardEvent).stopPropagation();
@@ -643,7 +737,7 @@ const useCodeIDEAEffect = ({
 };
 
 function CodeIDEA(): React.ReactElement {
-  const editorRef = useRef<unknown>(null);
+  const editorRef = useRef<React.ElementRef<typeof MonacoEditor>>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const textQueue = useRef<string[]>([]);
   const wsMessageStatus = useRef<string>('end');
@@ -677,7 +771,7 @@ function CodeIDEA(): React.ReactElement {
     id,
   });
   const value = useMemo(
-    () => currentNode?.data?.nodeParam?.code,
+    () => currentNode?.data?.nodeParam?.code ?? '',
     [currentNode]
   );
   useEffect(() => {
@@ -794,7 +888,9 @@ function CodeIDEAMask({
       code: 'python-dependency',
     };
     getCommonConfig(params).then(data => {
-      setCodeIDEAPackage(JSON.stringify(JSON.parse(data?.value), null, 2));
+      setCodeIDEAPackage(
+        JSON.stringify(JSON.parse(data?.value ?? '[]'), null, 2)
+      );
     });
   }, []);
 

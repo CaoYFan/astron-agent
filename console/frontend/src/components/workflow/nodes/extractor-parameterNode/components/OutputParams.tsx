@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlowNodeInput, FlowSelect } from '@/components/workflow/ui';
@@ -7,7 +8,7 @@ import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const {
     handleChangeOutputParam,
     handleAddOutputLine,
@@ -91,6 +92,7 @@ function index({ id, data }): React.ReactElement {
                     handleChangeOutputParam(
                       item?.id,
                       (data, value) => {
+                        if (!data.schema) return;
                         data.schema.type = value;
                       },
                       value

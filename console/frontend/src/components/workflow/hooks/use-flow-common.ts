@@ -1,3 +1,5 @@
+import { MarkerType } from 'reactflow';
+import type { LoopVariable, WorkflowNode } from '../types/domain';
 import { useEffect, useMemo, useRef } from 'react';
 import { useMemoizedFn } from 'ahooks';
 import { useLocation } from 'react-router-dom';
@@ -109,7 +111,7 @@ const useAddNode = (): UseAddNodeReturn => {
           const startType = isLoop ? 'loop-node-start' : 'iteration-node-start';
           const endType = isLoop ? 'loop-node-end' : 'iteration-node-end';
           const startNodeId = getNodeId(startType);
-          const loopVariable = {
+          const loopVariable: LoopVariable = {
             id: uuid(),
             name: 'loop_value',
             schema: {
@@ -120,11 +122,11 @@ const useAddNode = (): UseAddNodeReturn => {
               content: '',
             },
           };
-          let loopVariables = [loopVariable];
+          let loopVariables: LoopVariable[] = [loopVariable];
           if (isLoop) {
             loopVariables = (
-              addNode.data.nodeParam.loopVariables?.length > 0
-                ? addNode.data.nodeParam.loopVariables
+              (addNode.data.nodeParam.loopVariables?.length ?? 0) > 0
+                ? (addNode.data.nodeParam.loopVariables ?? [])
                 : [loopVariable]
             ).map((variable, index) => ({
               id: variable.id || (index === 0 ? loopVariable.id : uuid()),
@@ -293,7 +295,7 @@ const useAddNode = (): UseAddNodeReturn => {
         );
         canPublishSetNot();
         setWillAddNode(null);
-        checkNode(addNodes[0].id);
+        if (addNodes[0]) checkNode(addNodes[0].id);
         return addNodes;
       }
     }
@@ -303,7 +305,15 @@ const useAddNode = (): UseAddNodeReturn => {
   };
 };
 
-const useAddToolNode = ({ addEdge }): UseAddToolNodeReturn => {
+const useAddToolNode = ({
+  addEdge,
+}: {
+  addEdge: (
+    sourceHandle: string | null,
+    currentNode: WorkflowNode,
+    nextNode: WorkflowNode
+  ) => void;
+}): UseAddToolNodeReturn => {
   const willAddNode = useFlowsManager(state => state.willAddNode);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
@@ -316,6 +326,7 @@ const useAddToolNode = ({ addEdge }): UseAddToolNodeReturn => {
   const reactFlowInstance = currentStore(state => state.reactFlowInstance);
   const checkNode = currentStore(state => state.checkNode);
   const handleAddToolNode = useMemoizedFn((tool: ToolType): void => {
+    if (!willAddNode || !reactFlowInstance) return;
     takeSnapshot();
     const currentTypeList = nodes.filter(
       node => node?.data?.nodeParam?.pluginId === tool.toolId
@@ -342,7 +353,7 @@ const useAddToolNode = ({ addEdge }): UseAddToolNodeReturn => {
       id: getNodeId(willAddNode.idType),
       type: 'custom',
       nodeType: willAddNode?.idType,
-      position: generateRandomPosition(reactFlowInstance?.getViewport()),
+      position: generateRandomPosition(reactFlowInstance.getViewport()),
       selected: true,
       data: {
         icon: willAddNode.icon,
@@ -358,7 +369,7 @@ const useAddToolNode = ({ addEdge }): UseAddToolNodeReturn => {
     canPublishSetNot();
     message.success(`${tool.name} 已添加`);
     if (beforeNode) {
-      addEdge(beforeNode.sourceHandle, beforeNode, newToolNode);
+      addEdge(beforeNode.sourceHandle ?? null, beforeNode, newToolNode);
     }
     checkNode(newToolNode.id);
   });
@@ -367,7 +378,15 @@ const useAddToolNode = ({ addEdge }): UseAddToolNodeReturn => {
   };
 };
 
-const useAddMcpNode = ({ addEdge }): UseAddMcpNodeReturn => {
+const useAddMcpNode = ({
+  addEdge,
+}: {
+  addEdge: (
+    sourceHandle: string | null,
+    currentNode: WorkflowNode,
+    nextNode: WorkflowNode
+  ) => void;
+}): UseAddMcpNodeReturn => {
   const willAddNode = useFlowsManager(state => state.willAddNode);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
@@ -378,10 +397,12 @@ const useAddMcpNode = ({ addEdge }): UseAddMcpNodeReturn => {
   const reactFlowInstance = currentStore(state => state.reactFlowInstance);
   const checkNode = currentStore(state => state.checkNode);
   const handleAddMcpNode = useMemoizedFn((mcpParam: McpType): void => {
+    if (!willAddNode || !reactFlowInstance) return;
     takeSnapshot();
     const currentTypeList = nodes.filter(
       node => node?.data?.nodeParam?.mcpServerId === mcpParam.mcpId
     );
+    willAddNode.data.nodeParam.mcpServerId = mcpParam.mcpId;
     willAddNode.data.nodeParam.toolName = mcpParam.name;
     willAddNode.data.nodeParam.mcpServerUrl = mcpParam.server_url;
     willAddNode.data.nodeParam.toolDescription = mcpParam.description;
@@ -403,7 +424,7 @@ const useAddMcpNode = ({ addEdge }): UseAddMcpNodeReturn => {
       id: getNodeId(willAddNode.idType),
       type: 'custom',
       nodeType: willAddNode?.idType,
-      position: generateRandomPosition(reactFlowInstance?.getViewport()),
+      position: generateRandomPosition(reactFlowInstance.getViewport()),
       selected: true,
       data: {
         icon: willAddNode.icon,
@@ -419,7 +440,7 @@ const useAddMcpNode = ({ addEdge }): UseAddMcpNodeReturn => {
     canPublishSetNot();
     message.success(`${mcpParam.name} 已添加`);
     if (beforeNode) {
-      addEdge(beforeNode.sourceHandle, beforeNode, newToolNode);
+      addEdge(beforeNode.sourceHandle ?? null, beforeNode, newToolNode);
     }
     checkNode(newToolNode.id);
   });
@@ -428,7 +449,15 @@ const useAddMcpNode = ({ addEdge }): UseAddMcpNodeReturn => {
   };
 };
 
-const useAddFlowNode = ({ addEdge }): UseAddFlowNodeReturn => {
+const useAddFlowNode = ({
+  addEdge,
+}: {
+  addEdge: (
+    sourceHandle: string | null,
+    currentNode: WorkflowNode,
+    nextNode: WorkflowNode
+  ) => void;
+}): UseAddFlowNodeReturn => {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
   const user = useUserStore(state => state.user);
@@ -440,6 +469,7 @@ const useAddFlowNode = ({ addEdge }): UseAddFlowNodeReturn => {
   const reactFlowInstance = currentStore(state => state.reactFlowInstance);
   const checkNode = currentStore(state => state.checkNode);
   const handleAddFlowNode = useMemoizedFn((flow: FlowType): void => {
+    if (!willAddNode || !reactFlowInstance) return;
     takeSnapshot();
     const currentTypeList = nodes.filter(
       node => node?.data?.nodeParam?.flowId === flow.flowId
@@ -448,14 +478,14 @@ const useAddFlowNode = ({ addEdge }): UseAddFlowNodeReturn => {
     willAddNode.data.nodeParam.appId = flow?.appId;
     willAddNode.data.nodeParam.flowId = flow?.flowId;
     willAddNode.data.nodeParam.uid = user?.uid?.toString() || '';
-    willAddNode.data.nodeParam.version = (flow as unknown)?.version || '';
-    willAddNode.data.inputs = (flow as unknown)?.ioInversion?.inputs || [];
-    willAddNode.data.outputs = (flow as unknown)?.ioInversion?.outputs || [];
+    willAddNode.data.nodeParam.version = flow.version || '';
+    willAddNode.data.inputs = flow.ioInversion?.inputs || [];
+    willAddNode.data.outputs = flow.ioInversion?.outputs || [];
     const newFlowNode = {
       id: getNodeId(willAddNode.idType),
       type: 'custom',
       nodeType: willAddNode?.idType,
-      position: generateRandomPosition(reactFlowInstance?.getViewport()),
+      position: generateRandomPosition(reactFlowInstance.getViewport()),
       selected: true,
       data: {
         icon: willAddNode.icon,
@@ -471,7 +501,7 @@ const useAddFlowNode = ({ addEdge }): UseAddFlowNodeReturn => {
     canPublishSetNot();
     message.success(`${flow.name} 已添加`);
     if (beforeNode) {
-      addEdge(beforeNode.sourceHandle, beforeNode, newFlowNode);
+      addEdge(beforeNode.sourceHandle ?? null, beforeNode, newFlowNode);
     }
     checkNode(newFlowNode.id);
   });
@@ -480,7 +510,15 @@ const useAddFlowNode = ({ addEdge }): UseAddFlowNodeReturn => {
   };
 };
 
-const useAddRpaNode = ({ addEdge }): UseAddRpaNodeReturn => {
+const useAddRpaNode = ({
+  addEdge,
+}: {
+  addEdge: (
+    sourceHandle: string | null,
+    currentNode: WorkflowNode,
+    nextNode: WorkflowNode
+  ) => void;
+}): UseAddRpaNodeReturn => {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const currentFlow = useFlowsManager(state => state.currentFlow);
   const nodes = currentStore(state => state.nodes);
@@ -492,6 +530,7 @@ const useAddRpaNode = ({ addEdge }): UseAddRpaNodeReturn => {
   const reactFlowInstance = currentStore(state => state.reactFlowInstance);
   const checkNode = currentStore(state => state.checkNode);
   const handleAddRpaNode = useMemoizedFn((rpaParam: RpaNodeParam): void => {
+    if (!willAddNode || !reactFlowInstance) return;
     takeSnapshot();
     const currentTypeList = nodes.filter(
       node => node?.data?.nodeParam?.projectId === rpaParam.project_id
@@ -513,7 +552,7 @@ const useAddRpaNode = ({ addEdge }): UseAddRpaNodeReturn => {
       id: getNodeId(willAddNode.idType),
       type: 'custom',
       nodeType: willAddNode?.idType,
-      position: generateRandomPosition(reactFlowInstance?.getViewport()),
+      position: generateRandomPosition(reactFlowInstance.getViewport()),
       selected: true,
       data: {
         icon: willAddNode.icon,
@@ -529,7 +568,7 @@ const useAddRpaNode = ({ addEdge }): UseAddRpaNodeReturn => {
     canPublishSetNot();
     message.success(`${rpaParam?.name} 已添加`);
     if (beforeNode) {
-      addEdge(beforeNode.sourceHandle, beforeNode, newRpaNode);
+      addEdge(beforeNode.sourceHandle ?? null, beforeNode, newRpaNode);
     }
     checkNode(newRpaNode.id);
   });
@@ -593,14 +632,14 @@ export const useFlowCommon = (): UseFlowCommonReturn => {
       currentNode: NewNodeType,
       nextNode: NewNodeType
     ): void => {
-      const edge = {
+      const edge: Edge = {
         source: currentNode?.id,
         sourceHandle: sourceHandle,
         target: nextNode?.id,
         targetHandle: null,
         type: 'customEdge',
         markerEnd: {
-          type: 'arrow',
+          type: MarkerType.Arrow,
           color: '#6356EA',
         },
         data: {
@@ -610,10 +649,7 @@ export const useFlowCommon = (): UseFlowCommonReturn => {
           nextNode?.id
         }`,
       };
-      setEdges((edges: unknown[]) => {
-        const newEdges = [...edges, edge] as Edge[];
-        return newEdges;
-      });
+      setEdges(edges => [...edges, edge]);
     }
   );
 
@@ -631,7 +667,7 @@ export const useFlowCommon = (): UseFlowCommonReturn => {
       currentNode: NewNodeType
     ): void => {
       const addNodes = handleAddNode(addNode, position);
-      addNodes && addEdge(sourceHandle, currentNode, addNodes[0]);
+      if (addNodes?.[0]) addEdge(sourceHandle, currentNode, addNodes[0]);
       setBeforeNode({
         ...currentNode,
         sourceHandle,

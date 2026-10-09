@@ -1,4 +1,14 @@
-import { Node } from 'reactflow';
+import type { VersionItem } from '../../drawer/chat-debugger';
+import type { ParameterProperty } from '../../domain';
+import type {
+  WorkflowNode,
+  WorkflowNodeTemplate,
+  WorkflowNodeCategory,
+  WorkflowModel,
+  TextNodeConfig,
+} from '../../domain';
+import type { AgentStrategy } from '../../nodes/agent';
+
 import { FlowType, ErrNodeType } from '../..';
 import { FlowStoreType } from '../flow';
 import { UseBoundStore, StoreApi } from 'zustand';
@@ -6,11 +16,11 @@ import { UseBoundStore, StoreApi } from 'zustand';
 export type FlowsManagerStoreType = {
   singleNodeDebuggingInfo: {
     nodeId: string;
-    controller: unknown;
+    controller: AbortController | null;
   };
   setSingleNodeDebuggingInfo: (singleNodeDebuggingInfo: {
     nodeId: string;
-    controller: unknown;
+    controller: AbortController | null;
   }) => void;
   clearFlowCanvasModalInfo: {
     open: boolean;
@@ -26,14 +36,18 @@ export type FlowsManagerStoreType = {
     open: boolean;
     nodeId: string;
   }) => void;
-  willAddNode: unknown;
-  setWillAddNode: (willAddNode: unknown) => void;
-  beforeNode: unknown;
-  setBeforeNode: (beforeNode: unknown) => void;
+  willAddNode: WorkflowNodeTemplate | null;
+  setWillAddNode: (willAddNode: WorkflowNodeTemplate | null) => void;
+  beforeNode: (WorkflowNode & { sourceHandle?: string | null }) | null;
+  setBeforeNode: (
+    beforeNode: (WorkflowNode & { sourceHandle?: string | null }) | null
+  ) => void;
   autonomousMode: boolean;
   setAutonomousMode: (autonomousMode: boolean) => void;
   openOperationResult: boolean;
-  setOpenOperationResult: (openOperationResult: unknown) => void;
+  setOpenOperationResult: (
+    openOperationResult: boolean | ((previous: boolean) => boolean)
+  ) => void;
   canvasesDisabled: boolean;
   setCanvasesDisabled: (canvasesDisabled: boolean) => void;
   showMultipleCanvasesTip: boolean;
@@ -53,12 +67,14 @@ export type FlowsManagerStoreType = {
   knowledgeDetailModalInfo: {
     open: boolean;
     nodeId: string;
-    repoId: string;
+    repoId: string | number;
+    tag?: string;
   };
   setKnowledgeDetailModalInfo: (knowledgeDetailModalInfo: {
     open: boolean;
     nodeId: string;
-    repoId: string;
+    repoId: string | number;
+    tag?: string;
   }) => void;
   toolModalInfo: {
     open: boolean;
@@ -76,7 +92,7 @@ export type FlowsManagerStoreType = {
     open: boolean;
   };
   setRpaModalInfo: (rpaModalInfo: { open: boolean }) => void;
-  currentStore?: unknown;
+  currentStore?: UseBoundStore<StoreApi<FlowStoreType>>;
   knowledgeParameterModalInfo: {
     open: boolean;
     nodeId: string;
@@ -95,34 +111,42 @@ export type FlowsManagerStoreType = {
   }) => void;
   setCurrentStore: (iteratorStore: string) => void;
   getCurrentStore: () => UseBoundStore<StoreApi<FlowStoreType>>;
-  removeTextNodeConfig: (id: string) => void;
-  sparkLlmModels: unknown[];
-  decisionMakingModels: unknown[];
-  extractorParameterModels: unknown[];
-  agentModels: unknown[];
-  knowledgeProModels: unknown[];
-  questionAnswerModels: unknown[];
-  nodeList: unknown[];
+  removeTextNodeConfig: (id: string) => Promise<TextNodeConfig[]>;
+  sparkLlmModels: WorkflowModel[];
+  decisionMakingModels: WorkflowModel[];
+  extractorParameterModels: WorkflowModel[];
+  agentModels: WorkflowModel[];
+  knowledgeProModels: WorkflowModel[];
+  questionAnswerModels: WorkflowModel[];
+  nodeList: WorkflowNodeCategory[];
   setNodeList: (
-    update: unknown[] | ((oldState: unknown[]) => unknown[])
+    update:
+      | WorkflowNodeCategory[]
+      | ((oldState: WorkflowNodeCategory[]) => WorkflowNodeCategory[])
   ) => void;
   errNodes: Array<ErrNodeType>;
-  setErrNodes: (node: Node | null, string?) => void;
+  setErrNodes: (nodes: ErrNodeType[]) => void;
   showNodeList: boolean;
   setShowNodeList: (showNodeList: boolean) => void;
   updateNodeInputData: boolean;
   edgeType: string;
   setEdgeType: (edgeType: string) => void;
-  setUpdateNodeInputData: (updateNodeInputData: unknown) => void;
+  setUpdateNodeInputData: (
+    updateNodeInputData: boolean | ((previous: boolean) => boolean)
+  ) => void;
   flowChatResultOpen: boolean;
   setFlowChatResultOpen: (flowChatResultOpen: boolean) => void;
   workflowTracePanelOpen: boolean;
   setWorkflowTracePanelOpen: (workflowTracePanelOpen: boolean) => void;
-  flowResult: { status: string; timeCost: string; totalTokens: string };
+  flowResult: {
+    status: string;
+    timeCost?: string | number;
+    totalTokens?: string | number;
+  };
   setFlowResult: (flowResult: {
     status: string;
-    timeCost: string;
-    totalTokens: string;
+    timeCost?: string | number;
+    totalTokens?: string | number;
   }) => void;
   isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
@@ -130,14 +154,25 @@ export type FlowsManagerStoreType = {
   initFlowData: (id: string) => Promise<void>;
   currentFlow: FlowType | undefined;
   setCurrentFlow: (
-    update: (FlowType | unknown) | ((oldState: FlowType) => FlowType)
+    update:
+      | FlowType
+      | undefined
+      | ((oldState: FlowType | undefined) => FlowType | undefined)
   ) => void;
-  textNodeConfigList: unknown;
-  setTextNodeConfigList: (textNodeConfigList: unknown) => void;
-  agentStrategy: unknown;
-  setAgentStrategy: (agentStrategy: unknown) => void;
-  knowledgeProStrategy: unknown;
-  setKnowledgeProStrategy: (knowledgeProStrategy: unknown) => void;
+  textNodeConfigList: TextNodeConfig[];
+  setAgentStrategy: (
+    value: AgentStrategy[] | ((old: AgentStrategy[]) => AgentStrategy[])
+  ) => void;
+  setKnowledgeProStrategy: (
+    value: AgentStrategy[] | ((old: AgentStrategy[]) => AgentStrategy[])
+  ) => void;
+  setTextNodeConfigList: (
+    textNodeConfigList:
+      | TextNodeConfig[]
+      | ((previous: TextNodeConfig[]) => TextNodeConfig[])
+  ) => void;
+  agentStrategy: AgentStrategy[];
+  knowledgeProStrategy: AgentStrategy[];
   addTextNodeConfig: (params: unknown) => Promise<void>;
   autoSaveCurrentFlow: () => void;
   flushCurrentFlow: () => Promise<void>;
@@ -163,26 +198,46 @@ export type FlowsManagerStoreType = {
     open: boolean;
     nodeId: string;
     paramsId: string;
-    data: unknown;
+    data?: ParameterProperty;
   };
-  setDefaultValueModalInfo: (defaultValueModalInfo: unknown) => void;
+  setDefaultValueModalInfo: (
+    update:
+      | FlowsManagerStoreType['defaultValueModalInfo']
+      | ((
+          old: FlowsManagerStoreType['defaultValueModalInfo']
+        ) => FlowsManagerStoreType['defaultValueModalInfo'])
+  ) => void;
   promptOptimizeModalInfo: {
     open: boolean;
     nodeId: string;
     key: string;
   };
-  setPromptOptimizeModalInfo: (promptOptimizeModalInfo: unknown) => void;
+  setPromptOptimizeModalInfo: (
+    update:
+      | FlowsManagerStoreType['promptOptimizeModalInfo']
+      | ((
+          old: FlowsManagerStoreType['promptOptimizeModalInfo']
+        ) => FlowsManagerStoreType['promptOptimizeModalInfo'])
+  ) => void;
   nodeInfoEditDrawerlInfo: {
     open: boolean;
     nodeId: string;
   };
-  setNodeInfoEditDrawerlInfo: (nodeInfoEditDrawerlInfo: unknown) => void;
+  setNodeInfoEditDrawerlInfo: (
+    update:
+      | FlowsManagerStoreType['nodeInfoEditDrawerlInfo']
+      | ((
+          old: FlowsManagerStoreType['nodeInfoEditDrawerlInfo']
+        ) => FlowsManagerStoreType['nodeInfoEditDrawerlInfo'])
+  ) => void;
   loadingModels: boolean;
   setLoadingModels: (loadingModels: boolean) => void;
   historyVersion: boolean;
   setHistoryVersion: (historyVersion: boolean) => void;
-  historyVersionData: unknown;
-  setHistoryVersionData: (historyVersionData: unknown) => void;
+  historyVersionData: Partial<FlowType & VersionItem> | null;
+  setHistoryVersionData: (
+    historyVersionData: Partial<FlowType & VersionItem> | null
+  ) => void;
   controlMode: string;
   setControlMode: (controlMode: string) => void;
 };
@@ -191,3 +246,6 @@ export type UseUndoRedoOptions = {
   maxHistorySize: number;
   enableShortcuts: boolean;
 };
+
+export type FlowsManagerGetter = () => FlowsManagerStoreType;
+export type FlowsManagerSetter = StoreApi<FlowsManagerStoreType>['setState'];

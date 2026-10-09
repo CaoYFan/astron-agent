@@ -1,3 +1,37 @@
+import type {
+  WorkflowModel,
+  WorkflowNodeData,
+  WorkflowNodeParameters,
+} from '@/components/workflow/types/domain';
+import type { ChangeNodeParameter } from '@/components/workflow/nodes/types';
+import type {
+  ModelSetting,
+  ModelSettingValue,
+} from '@/components/workflow/nodes/model-settings';
+import {
+  readModelSettings,
+  readModelSetting,
+  writeModelSetting,
+  numericConstraint,
+} from '@/components/workflow/nodes/model-settings';
+
+interface ModelParametersContext {
+  item: ModelSetting;
+  nodeParam: WorkflowNodeParameters;
+  currentSelectModel?: WorkflowModel;
+  handleChangeNodeParam: ChangeNodeParameter;
+  handleDifferentModel: (
+    data: WorkflowNodeData,
+    item: ModelSetting,
+    value: ModelSettingValue
+  ) => void;
+  setShowModelParmas: (show: boolean) => void;
+}
+type ModelParametersProps<Key extends keyof ModelParametersContext> = Pick<
+  ModelParametersContext,
+  Key
+>;
+
 import React, { useEffect, useState, useRef, memo } from 'react';
 import { Tooltip, Slider, Switch } from 'antd';
 import { useMemoizedFn } from 'ahooks';
@@ -15,7 +49,11 @@ function useClickOutside(
 ): void | (() => void) {
   useEffect(() => {
     function handleClick(e: MouseEvent): void {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (
+        ref.current &&
+        e.target instanceof Node &&
+        !ref.current.contains(e.target)
+      ) {
         onClose();
       }
     }
@@ -24,39 +62,13 @@ function useClickOutside(
   }, [ref, onClose]);
 }
 
-function useConfigs(currentSelectModel, setConfigs): void {
+function useConfigs(
+  currentSelectModel: WorkflowModel | undefined,
+  setConfigs: React.Dispatch<React.SetStateAction<ModelSetting[]>>
+): void {
   useEffect(() => {
-    if (!currentSelectModel) return;
-
-    try {
-      if (currentSelectModel?.llmSource === 2) {
-        const configs =
-          currentSelectModel?.config?.serviceBlock?.[
-            currentSelectModel.serviceId
-          ]?.[0]?.fields ||
-          currentSelectModel?.config?.serviceBlock?.['@@serviceId@@']?.[0]
-            ?.fields ||
-          [];
-        configs.forEach(item => {
-          if (item.key === 'max_tokens') item.key = 'maxTokens';
-          if (item.key === 'top_k') item.key = 'topK';
-          if (item.key === 'search_disable') item.key = 'searchDisable';
-        });
-        setConfigs(configs);
-      } else {
-        const configs = JSON.parse(currentSelectModel?.config || '[]')?.map(
-          item => ({
-            ...item,
-            desc: item?.name,
-            name: item?.key,
-          })
-        );
-        setConfigs(configs);
-      }
-    } catch {
-      return;
-    }
-  }, [currentSelectModel]);
+    setConfigs(readModelSettings(currentSelectModel));
+  }, [currentSelectModel, setConfigs]);
 }
 
 // ----------------- 子组件 -----------------
@@ -66,14 +78,20 @@ function ParamSwitch({
   currentSelectModel,
   handleChangeNodeParam,
   handleDifferentModel,
-}): React.ReactElement {
+}: ModelParametersProps<
+  | 'item'
+  | 'nodeParam'
+  | 'currentSelectModel'
+  | 'handleChangeNodeParam'
+  | 'handleDifferentModel'
+>): React.ReactElement {
   return (
     <Switch
       className="list-switch config-switch"
       checked={
         currentSelectModel?.llmSource === 0
-          ? nodeParam?.extraParams?.[item.key]
-          : !nodeParam[item.key]
+          ? Boolean(nodeParam.extraParams?.[item.key])
+          : !readModelSetting(nodeParam, item.key)
       }
       onChange={val =>
         handleChangeNodeParam(
@@ -90,14 +108,18 @@ function ParamRange({
   nodeParam,
   handleChangeNodeParam,
   handleDifferentModel,
-}): React.ReactElement {
-  const value = nodeParam[item.key] ?? nodeParam?.extraParams?.[item.key];
+}: ModelParametersProps<
+  'item' | 'nodeParam' | 'handleChangeNodeParam' | 'handleDifferentModel'
+>): React.ReactElement {
+  const configured =
+    readModelSetting(nodeParam, item.key) ?? nodeParam.extraParams?.[item.key];
+  const value = typeof configured === 'number' ? configured : undefined;
 
   return (
     <div className="w-full flex items-center justify-between">
       <Slider
-        min={item?.constraintContent?.[0]?.name}
-        max={item?.constraintContent?.[1]?.name}
+        min={numericConstraint(item.constraintContent[0]?.name)}
+        max={numericConstraint(item.constraintContent[1]?.name)}
         step={item?.precision || 1}
         value={value}
         className="flex-1 config-slider nodrag"
@@ -122,21 +144,23 @@ function ParamRange({
             nodeParam?.extraParams &&
             nodeParam?.extraParams?.[item.key] === null
           ) {
-            handleChangeNodeParam(
-              data => (data.nodeParam.extraParams[item.key] = item.default),
-              item.default
-            );
+            handleChangeNodeParam(data => {
+              data.nodeParam.extraParams = {
+                ...data.nodeParam.extraParams,
+                [item.key]: item.default,
+              };
+            }, item.default);
           }
-          if (nodeParam?.[item.key] === null) {
+          if (readModelSetting(nodeParam, item.key) === null) {
             handleChangeNodeParam(
-              data => (data.nodeParam[item.key] = item.default),
+              data => writeModelSetting(data.nodeParam, item.key, item.default),
               item.default
             );
           }
         }}
         step={item?.precision || 1}
-        min={item?.constraintContent?.[0]?.name}
-        max={item?.constraintContent?.[1]?.name}
+        min={numericConstraint(item.constraintContent[0]?.name)}
+        max={numericConstraint(item.constraintContent[1]?.name)}
         controls={false}
       />
     </div>
@@ -149,7 +173,13 @@ function ParamItem({
   currentSelectModel,
   handleChangeNodeParam,
   handleDifferentModel,
-}): React.ReactElement {
+}: ModelParametersProps<
+  | 'item'
+  | 'nodeParam'
+  | 'currentSelectModel'
+  | 'handleChangeNodeParam'
+  | 'handleDifferentModel'
+>): React.ReactElement {
   return (
     <div>
       <div className="flex items-center gap-1 justify-between">
@@ -191,25 +221,32 @@ function ModelParams({
   currentSelectModel,
   nodeParam,
   handleChangeNodeParam,
-}): React.ReactElement {
+}: ModelParametersProps<
+  | 'setShowModelParmas'
+  | 'currentSelectModel'
+  | 'nodeParam'
+  | 'handleChangeNodeParam'
+>): React.ReactElement {
   const { t } = useTranslation();
   const paramsRef = useRef<HTMLDivElement | null>(null);
-  const [configs, setConfigs] = useState([]);
+  const [configs, setConfigs] = useState<ModelSetting[]>([]);
 
   useConfigs(currentSelectModel, setConfigs);
   useClickOutside(paramsRef, () => setShowModelParmas(false));
 
-  const handleDifferentModel = useMemoizedFn((data, item, value) => {
-    if (currentSelectModel?.llmSource === 0) {
-      Reflect.deleteProperty(data.nodeParam, item.key);
-      data.nodeParam.extraParams = {
-        ...data.nodeParam.extraParams,
-        [item.key]: value,
-      };
-    } else {
-      data.nodeParam[item.key] = value;
+  const handleDifferentModel = useMemoizedFn(
+    (data: WorkflowNodeData, item: ModelSetting, value: ModelSettingValue) => {
+      if (currentSelectModel?.llmSource === 0) {
+        Reflect.deleteProperty(data.nodeParam, item.key);
+        data.nodeParam.extraParams = {
+          ...data.nodeParam.extraParams,
+          [item.key]: value,
+        };
+      } else {
+        writeModelSetting(data.nodeParam, item.key, value);
+      }
     }
-  });
+  );
 
   return (
     <div
@@ -240,10 +277,8 @@ function ModelParams({
       </div>
       <div className="flex flex-col gap-2 w-full text-second font-medium mt-4">
         {configs
-          ?.filter((item: unknown) =>
-            ['range', 'switch'].includes(item.constraintType)
-          )
-          ?.map((item: unknown, index) => (
+          ?.filter(item => ['range', 'switch'].includes(item.constraintType))
+          ?.map((item, index) => (
             <ParamItem
               key={index}
               {...{

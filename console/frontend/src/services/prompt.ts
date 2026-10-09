@@ -1,3 +1,8 @@
+import type { AgentPromptPage } from '@/types/workflow-api';
+export type {
+  AgentPromptTemplate,
+  AgentPromptPage,
+} from '@/types/workflow-api';
 import http from '@/utils/http';
 
 // 通用响应结构
@@ -24,8 +29,11 @@ export async function createPromptGroup(
 // 获取 Agent 模版列表
 export async function getAgentPromptList(
   params: Record<string, unknown>
-): Promise<unknown[]> {
-  return http.get('/workflow/agent-node/prompt-template', { params });
+): Promise<AgentPromptPage> {
+  return http.get<AgentPromptPage, AgentPromptPage>(
+    '/workflow/agent-node/prompt-template',
+    { params }
+  );
 }
 
 // 获取 Workflow Prompt 状态

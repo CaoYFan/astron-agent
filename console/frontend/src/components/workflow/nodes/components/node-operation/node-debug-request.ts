@@ -1,4 +1,10 @@
 import axios from 'axios';
+import type {
+  WorkflowDebugInput,
+  WorkflowDebugNode,
+  WorkflowInput,
+  WorkflowNode,
+} from '@/components/workflow/types/domain';
 
 export interface NodeDebugRequest {
   requestId: number;
@@ -27,13 +33,8 @@ export interface NodeDebugStatePatch<TDebuggerResult = unknown> {
   debuggerResult?: TDebuggerResult;
 }
 
-interface DebuggableNode<TData extends Record<string, unknown>> {
+interface DebuggableNode<TData extends { inputs?: unknown }> {
   data: TData;
-}
-
-interface NodeDebugInput extends Record<string, unknown> {
-  id?: unknown;
-  schema?: unknown;
 }
 
 interface ExecuteNodeDebugRequestOptions<TResult> {
@@ -72,7 +73,7 @@ export const createWorkflowIdentity = (
  * restoring the stale node snapshot captured when the request was started.
  */
 export const mergeNodeDebugState = <
-  TData extends Record<string, unknown>,
+  TData extends { inputs?: unknown },
   TNode extends DebuggableNode<TData>,
   TDebuggerResult = unknown,
 >(
@@ -90,99 +91,69 @@ export const mergeNodeDebugState = <
     },
   }) as TNode;
 
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-
 const mergeDebugInput = (
-  latestInput: NodeDebugInput,
-  requestedInput: NodeDebugInput
-): NodeDebugInput => {
-  const latestSchema = asRecord(latestInput.schema);
-  const requestedSchema = asRecord(requestedInput.schema);
-  const latestValue = asRecord(latestSchema?.value);
-  const requestedValue = asRecord(requestedSchema?.value);
+  latestInput: WorkflowInput,
+  requestedInput: WorkflowDebugInput
+): WorkflowDebugInput => {
+  const latestSchema = latestInput.schema;
+  const requestedSchema = requestedInput.schema;
+  if (!latestSchema || !requestedSchema?.value) return latestInput;
+  const latestValue = latestSchema.value;
+  const requestedValue = requestedSchema.value;
   return {
     ...latestInput,
-    ...(latestSchema || requestedSchema
-      ? {
-          schema: {
-            ...latestSchema,
-            ...(requestedSchema &&
-            Object.prototype.hasOwnProperty.call(requestedSchema, 'type')
-              ? { type: requestedSchema.type }
-              : {}),
-            ...(latestValue || requestedValue
-              ? {
-                  value: {
-                    ...latestValue,
-                    ...(requestedValue &&
-                    Object.prototype.hasOwnProperty.call(requestedValue, 'type')
-                      ? { type: requestedValue.type }
-                      : {}),
-                    ...(requestedValue &&
-                    Object.prototype.hasOwnProperty.call(
-                      requestedValue,
-                      'content'
-                    )
-                      ? { content: requestedValue.content }
-                      : {}),
-                  },
-                }
-              : {}),
-          },
-        }
-      : {}),
+    schema: {
+      ...latestSchema,
+      ...(Object.prototype.hasOwnProperty.call(requestedSchema, 'type')
+        ? { type: requestedSchema.type }
+        : {}),
+      value: {
+        ...latestValue,
+        ...(requestedValue.type === 'ref'
+          ? { type: 'ref', content: requestedValue.content }
+          : { type: 'literal', content: requestedValue.content }),
+      },
+    },
   };
 };
 
 /**
  * Rebuild the debug node from the post-flush store snapshot while retaining
- * only the transient input values selected in the debug drawer.
+ * only the transient input values selected in the debug drawer. Parsed debug
+ * values belong to the request and must never be typed as editor literals.
  */
-export const mergeNodeDebugRequest = <
-  TData extends Record<string, unknown>,
-  TNode extends DebuggableNode<TData>,
->(
-  latestNode: TNode,
-  originalNode: TNode,
-  requestedNode: TNode
-): TNode => {
+export const mergeNodeDebugRequest = (
+  latestNode: WorkflowNode,
+  originalNode: WorkflowNode,
+  requestedNode: WorkflowDebugNode
+): WorkflowDebugNode => {
   const latestInputs = Array.isArray(latestNode.data.inputs)
-    ? (latestNode.data.inputs as NodeDebugInput[])
+    ? latestNode.data.inputs
     : [];
   const originalInputs = Array.isArray(originalNode.data.inputs)
-    ? (originalNode.data.inputs as NodeDebugInput[])
+    ? originalNode.data.inputs
     : [];
   const requestedInputs = Array.isArray(requestedNode.data.inputs)
-    ? (requestedNode.data.inputs as NodeDebugInput[])
+    ? requestedNode.data.inputs
     : [];
   const requestedById = new Map(
-    requestedInputs.map(input => [String(input.id ?? ''), input])
+    requestedInputs.map(input => [input.id, input])
   );
   const refOverrideIds = new Set(
     originalInputs
-      .filter(input => {
-        const schema = asRecord(input.schema);
-        const value = asRecord(schema?.value);
-        return value?.type === 'ref';
-      })
-      .map(input => String(input.id ?? ''))
+      .filter(input => input.schema?.value?.type === 'ref')
+      .map(input => input.id)
   );
   const hasRefOverrides = refOverrideIds.size > 0;
   const inputs = latestInputs
     .map(latestInput => {
-      const id = String(latestInput.id ?? '');
-      const requestedInput = requestedById.get(id);
-      return refOverrideIds.has(id) && requestedInput
+      const requestedInput = requestedById.get(latestInput.id);
+      return refOverrideIds.has(latestInput.id) && requestedInput
         ? mergeDebugInput(latestInput, requestedInput)
         : latestInput;
     })
     .filter(input => {
-      const schema = asRecord(input.schema);
-      const value = asRecord(schema?.value);
-      const content = value?.content;
+      const content = input.schema?.value?.content;
       return hasRefOverrides
         ? (typeof content === 'string' && Boolean(content)) ||
             typeof content !== 'string'

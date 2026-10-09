@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import { Switch } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +11,7 @@ import {
 } from '@/components/workflow/ui';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
-export const EndDetail = memo(props => {
+export const EndDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { handleChangeNodeParam, nodeParam, isEndNode } = useNodeCommon({
     id,

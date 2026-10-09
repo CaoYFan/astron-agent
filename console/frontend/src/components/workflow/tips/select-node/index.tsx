@@ -1,8 +1,13 @@
+import type { WorkflowSnapshot } from '../../types/domain';
 import React from 'react';
 import cloneDeep from 'lodash/cloneDeep';
 import { message } from 'antd';
 
-export default function Select({ lastSelection }): React.ReactElement {
+export default function Select({
+  lastSelection,
+}: {
+  lastSelection: WorkflowSnapshot;
+}): React.ReactElement {
   const copyNodes = async (): Promise<void> => {
     const cloneLastSelection = cloneDeep(lastSelection);
     cloneLastSelection.nodes = cloneLastSelection.nodes?.filter(
@@ -11,8 +16,8 @@ export default function Select({ lastSelection }): React.ReactElement {
     try {
       await navigator.clipboard.writeText(JSON.stringify(cloneLastSelection));
       message.success('复制成功');
-    } catch (err) {
-      message.error('[Clipboard] 复制失败', err);
+    } catch {
+      message.error('[Clipboard] 复制失败');
     }
   };
 

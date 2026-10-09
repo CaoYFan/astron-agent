@@ -1,3 +1,10 @@
+import type {
+  VersionItem,
+  PublicResultItem,
+  FeedbackItem,
+} from '@/components/workflow/types/drawer/chat-debugger';
+import type { ConfigResponse } from '@/types/resource';
+import type { ModelConfigParam } from '@/types/model';
 import http from '@/utils/http';
 import { feedbackType } from '@/types/types-services';
 import { AvatarType } from '@/types/resource';
@@ -5,10 +12,11 @@ import { AvatarType } from '@/types/resource';
 export async function getCommonConfig(params: {
   category: string;
   code: string;
-}): Promise<unknown> {
-  return await http.get('/config-info/get-by-category-and-code', {
-    params,
-  });
+}): Promise<ConfigResponse | null> {
+  return await http.get<ConfigResponse | null, ConfigResponse | null>(
+    '/config-info/get-by-category-and-code',
+    { params }
+  );
 }
 
 export async function avatarImageGenerate(content: string): Promise<unknown> {
@@ -35,8 +43,16 @@ export async function getVersionList(params: {
   flowId: string;
   size: number;
   current: number;
-}): Promise<unknown> {
-  return await http.get('/workflow/version/list', { params });
+}): Promise<{
+  records: VersionItem[];
+  total: number;
+  current: number;
+  size: number;
+}> {
+  return await http.get<
+    { records: VersionItem[]; total: number; current: number; size: number },
+    { records: VersionItem[]; total: number; current: number; size: number }
+  >('/workflow/version/list', { params });
 }
 //还原版本
 export async function restoreVersion(params: {
@@ -53,16 +69,29 @@ export async function delVersion(id: string): Promise<unknown> {
 export async function getPublicResult(params: {
   flowId: string;
   name: string;
-}): Promise<unknown> {
-  return await http.get('/workflow/version/publish-result', {
-    params,
-  });
+}): Promise<PublicResultItem[]> {
+  return await http.get<PublicResultItem[], PublicResultItem[]>(
+    '/workflow/version/publish-result',
+    { params }
+  );
 }
 
 export async function nextQuestionAdvice(data: {
   question: string;
-}): Promise<unknown> {
-  return await http.post('/prompt/next-question-advice', data);
+}): Promise<string[]> {
+  const suggestions = await http.post<unknown, unknown>(
+    '/prompt/next-question-advice',
+    data
+  );
+  if (
+    !Array.isArray(suggestions) ||
+    !suggestions.every(
+      (item: unknown): item is string => typeof item === 'string'
+    )
+  ) {
+    throw new Error('Invalid question suggestions');
+  }
+  return suggestions;
 }
 
 export async function feedback(params: feedbackType): Promise<unknown> {
@@ -70,17 +99,19 @@ export async function feedback(params: feedbackType): Promise<unknown> {
 }
 
 export async function getModelConfigDetail(
-  id: string,
-  llmSource: string
-): Promise<unknown> {
-  return await http.get(`/llm/inter1?id=${id}&llmSource=${llmSource}`);
+  id: string | number,
+  llmSource: string | number
+): Promise<ModelConfigParam[]> {
+  return await http.get<ModelConfigParam[], ModelConfigParam[]>(
+    `/llm/inter1?id=${id}&llmSource=${llmSource}`
+  );
 }
 
 export async function getCustomModelConfigDetail(
-  id: string,
-  llmSource: string
-): Promise<unknown> {
-  return await http.get(
+  id: string | number,
+  llmSource: string | number
+): Promise<ModelConfigParam[]> {
+  return await http.get<ModelConfigParam[], ModelConfigParam[]>(
     `/llm/self-model-config?id=${id}&llmSource=${llmSource}`
   );
 }
@@ -102,6 +133,9 @@ export async function createFeedback(data: {
 // 获取反馈列表
 export async function getFeedbackList(params: {
   flowId: string;
-}): Promise<unknown> {
-  return await http.get('/workflow/feedback-list', { params });
+}): Promise<FeedbackItem[]> {
+  return await http.get<FeedbackItem[], FeedbackItem[]>(
+    '/workflow/feedback-list',
+    { params }
+  );
 }

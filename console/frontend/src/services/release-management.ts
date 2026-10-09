@@ -2,7 +2,9 @@
 import http from '../utils/http';
 
 /** ## get agent detail */
-export const getAgentDetail = async (botId: number): Promise<unknown> => {
+export const getAgentDetail = async (
+  botId: string | number
+): Promise<unknown> => {
   return await http.get(`/publish/bots/${botId}`);
 };
 

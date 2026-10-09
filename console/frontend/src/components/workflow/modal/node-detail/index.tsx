@@ -7,7 +7,7 @@ import { Icons } from '@/components/workflow/icons';
 function NodeDetail({
   currentNodeId,
   handleCloseNodeTemplate,
-}: NodeDetailProps): void {
+}: NodeDetailProps): React.ReactElement {
   const nodeDetailRef = useRef<HTMLDivElement | null>(null);
   const [nodeTemplate, setNodeTemplate] = useState<NodeTemplateItem[]>([]);
 
@@ -16,8 +16,8 @@ function NodeDetail({
       category: 'TEMPLATE',
       code: 'node',
     };
-    getCommonConfig(params).then((data: unknown) => {
-      setNodeTemplate(JSON.parse(data?.value));
+    getCommonConfig(params).then(data => {
+      setNodeTemplate(JSON.parse(data?.value ?? '[]'));
     });
   }, []);
 
@@ -64,7 +64,7 @@ function NodeDetail({
               {currentTemplateNode?.name}
             </div>
             <MarkdownRender
-              content={currentTemplateNode?.markdown}
+              content={currentTemplateNode?.markdown ?? ''}
               isSending={false}
             />
           </div>

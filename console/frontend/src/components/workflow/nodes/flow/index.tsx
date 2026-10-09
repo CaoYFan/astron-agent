@@ -1,9 +1,10 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import ExceptionHandling from '@/components/workflow/nodes/components/exception-handling';
 import FixedOutputs from '@/components/workflow/nodes/components/fixed-outputs';
 import FixedInputs from '@/components/workflow/nodes/components/fixed-inputs';
 
-export const FlowDetail = memo(props => {
+export const FlowDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
 
   return (

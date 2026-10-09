@@ -1,3 +1,19 @@
+import type { AvatarType } from '@/types/resource';
+import type {
+  CatalogPropsFor,
+  CatalogRow,
+  CatalogTool,
+  CatalogTab,
+  CatalogOperation,
+  ToolDraft,
+  PluginRow,
+  KnowledgeRow,
+  SkillRow,
+  ParameterSummary,
+  ParameterPreview,
+} from './catalog';
+import { isCatalogTool, readParameterSummaries, readMcpRows } from './catalog';
+
 import React, {
   useState,
   useEffect,
@@ -16,7 +32,7 @@ import { Button, Select, Spin, Tooltip, message } from 'antd';
 import { FlowInput } from '@/components/workflow/ui';
 import { debounce, throttle } from 'lodash';
 import dayjs from 'dayjs';
-import { isJSON } from '@/utils';
+
 import { capitalizeFirstLetter } from '@/components/workflow/utils/reactflowUtils';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import DeletePlugin from '@/components/workflow/modal/add-plugin/delete-plugin';
@@ -30,7 +46,6 @@ import KnowledgeList from './components/knowledge-list';
 import SkillList from './components/skill-list';
 import { configListRepos } from '@/services/knowledge';
 import { useTranslation } from 'react-i18next';
-import { useAddPluginType } from '@/components/workflow/types';
 
 import formSelect from '@/assets/imgs/main/icon_nav_dropdown.svg';
 import search from '@/assets/imgs/knowledge/icon_zhishi_search.png';
@@ -54,10 +69,26 @@ const useToolData = ({
   dataSource,
   currentTab,
   setStep,
-}): void => {
+}: CatalogPropsFor<
+  | 'setPagination'
+  | 'loader'
+  | 'loadingRef'
+  | 'hasMore'
+  | 'contentRef'
+  | 'setDataSource'
+  | 'setHasMore'
+  | 'orderFlag'
+  | 'orderBy'
+  | 'setLoading'
+  | 'toolRef'
+  | 'pagination'
+  | 'dataSource'
+  | 'currentTab'
+  | 'setStep'
+>): void => {
   useEffect((): void | (() => void) => {
     const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && !loadingRef.current) {
+      if (entries[0]?.isIntersecting && !loadingRef.current) {
         setPagination(pagination => ({
           ...pagination,
           pageNo: pagination?.pageNo + 1,
@@ -73,7 +104,7 @@ const useToolData = ({
       }
     };
   }, [hasMore]);
-  function renderTitle(param): React.ReactElement {
+  function renderTitle(param: ParameterSummary): React.ReactElement {
     return (
       <div>
         <div className="flex items-center gap-3">
@@ -86,8 +117,10 @@ const useToolData = ({
       </div>
     );
   }
-  function handleModifyToolUrlParams(toolRequestInput): unknown[] {
-    const toolRequestOutputTreeData = [];
+  function handleModifyToolUrlParams(
+    toolRequestInput: ParameterSummary[]
+  ): ParameterPreview[] {
+    const toolRequestOutputTreeData: ParameterPreview[] = [];
     toolRequestInput.forEach(item => {
       toolRequestOutputTreeData.push({
         title: renderTitle(item),
@@ -109,14 +142,16 @@ const useToolData = ({
     };
     listTools(params)
       .then(data => {
-        const newData = data?.pageData.map(item => ({
-          ...item,
-          params: handleModifyToolUrlParams(
-            (isJSON(item?.webSchema) &&
-              JSON.parse(item.webSchema)?.toolRequestInput) ||
-              []
-          ),
-        }));
+        const newData = (data.pageData ?? []).map(
+          (item): PluginRow => ({
+            kind: 'plugin',
+            ...item,
+            icon: item.icon ?? '',
+            params: handleModifyToolUrlParams(
+              readParameterSummaries(item.webSchema)
+            ),
+          })
+        );
         setDataSource(dataSource => [...dataSource, ...newData]);
         if (20 + dataSource?.length < data.totalCount) {
           setHasMore(true);
@@ -138,19 +173,22 @@ const useToolData = ({
     loadingRef.current = true;
     const params = {
       ...pagination,
+      page: pagination.pageNo,
       orderFlag,
       content: contentRef?.current,
     };
     listToolSquare(params)
       .then(data => {
-        const newData = data?.pageData.map(item => ({
-          ...item,
-          params: handleModifyToolUrlParams(
-            (isJSON(item?.webSchema) &&
-              JSON.parse(item.webSchema)?.toolRequestInput) ||
-              []
-          ),
-        }));
+        const newData = (data.pageData ?? []).map(
+          (item): PluginRow => ({
+            kind: 'plugin',
+            ...item,
+            icon: item.icon ?? '',
+            params: handleModifyToolUrlParams(
+              readParameterSummaries(item.webSchema)
+            ),
+          })
+        );
         setDataSource(dataSource => [...dataSource, ...newData]);
         if (20 + dataSource?.length < data.totalCount) {
           setHasMore(true);
@@ -178,15 +216,21 @@ const useToolData = ({
     };
     configListRepos(params)
       .then(data => {
-        const newData = data?.pageData
-          ?.filter(item => item?.tag !== 'SparkDesk-RAG')
-          ?.map(item => ({
-            ...item,
-            toolId: item['server_url'],
-            icon: item['logo_url'],
-            updateTime: dayjs(item?.updateTime)?.format('YYYY-MM-DD HH:mm:ss'),
-            createTime: dayjs(item?.createTime)?.format('YYYY-MM-DD HH:mm:ss'),
-          }));
+        const newData = (data.pageData ?? [])
+          .filter(item => item?.tag !== 'SparkDesk-RAG')
+          .map(
+            (item): KnowledgeRow => ({
+              ...item,
+              kind: 'knowledge',
+              toolId: item.coreRepoId || item.outerRepoId,
+              updateTime: dayjs(item?.updateTime)?.format(
+                'YYYY-MM-DD HH:mm:ss'
+              ),
+              createTime: dayjs(item?.createTime)?.format(
+                'YYYY-MM-DD HH:mm:ss'
+              ),
+            })
+          );
         setDataSource(() => [...newData]);
         setHasMore(false);
       })
@@ -204,10 +248,13 @@ const useToolData = ({
     loadingRef.current = true;
     listImportableSkills(contentRef?.current)
       .then(data => {
-        const newData = (data || []).map(item => ({
-          ...item,
-          toolId: String(item?.id),
-        }));
+        const newData = (data || []).map(
+          (item): SkillRow => ({
+            ...item,
+            kind: 'skill',
+            toolId: String(item?.id),
+          })
+        );
         setDataSource(() => [...newData]);
         setHasMore(false);
       })
@@ -225,13 +272,9 @@ const useToolData = ({
     loadingRef.current = true;
     getMcpServerListAPI()
       .then(data => {
-        const newData = data?.map(item => ({
+        const newData = readMcpRows(data).map(item => ({
           ...item,
-          toolId: item['server_url'],
-          description: item?.brief,
-          icon: item['logo_url'],
-          updateTime: dayjs(item['create_time'])?.format('YYYY-MM-DD HH:mm:ss'),
-          isMcp: true,
+          updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
         }));
         setDataSource(dataSource => [...dataSource, ...newData]);
         setHasMore(false);
@@ -273,10 +316,24 @@ const useAddPlugin = ({
   orderFlag,
   setSearchValue,
   searchValue,
-}): useAddPluginType => {
+}: CatalogPropsFor<
+  | 'checkedIds'
+  | 'nodes'
+  | 'currentTab'
+  | 'toolRef'
+  | 'setHasMore'
+  | 'setLoading'
+  | 'setDataSource'
+  | 'setPagination'
+  | 'contentRef'
+  | 'handleAddTool'
+  | 'orderFlag'
+  | 'setSearchValue'
+  | 'searchValue'
+>) => {
   const { t } = useTranslation();
   const handleCheckTool = useCallback(
-    throttle((tool): unknown => {
+    throttle((tool: CatalogTool): void => {
       if (!checkedIds.includes(tool.toolId) && checkedIds?.length >= 30) {
         message.warning(t('workflow.nodes.common.maxAddWarning'));
         return;
@@ -286,7 +343,7 @@ const useAddPlugin = ({
     [nodes, currentTab, checkedIds]
   );
   const fetchDataDebounce = useCallback(
-    debounce((value): void => {
+    debounce((value: string): void => {
       if (toolRef.current) {
         toolRef.current.scrollTop = 0;
       }
@@ -310,9 +367,10 @@ const useAddPlugin = ({
     [currentTab, orderFlag]
   );
   const handleThrottleAddTool = useCallback(
-    (tool): unknown => {
+    (tool: CatalogTool): void => {
       handleAddTool({
         ...tool,
+        id: String(tool.id),
         type:
           currentTab === 'mcp'
             ? 'mcp'
@@ -324,11 +382,8 @@ const useAddPlugin = ({
     },
     [nodes, currentTab, checkedIds]
   );
-  function renderParamsTooltip(data): React.ReactElement {
-    const params =
-      (isJSON(data?.webSchema) &&
-        JSON.parse(data.webSchema)?.toolRequestInput) ||
-      [];
+  function renderParamsTooltip(data: CatalogTool): React.ReactElement {
+    const params = readParameterSummaries(data.webSchema);
     return (
       <div>
         <div className="text-base font-semibold">{data?.name}</div>
@@ -364,7 +419,14 @@ const LeftNav = ({
   setCurrentTab,
   setOperate,
   setCurrentToolInfo,
-}): React.ReactElement => {
+}: CatalogPropsFor<
+  | 'closeToolModal'
+  | 'handleChangeTab'
+  | 'currentTab'
+  | 'setCurrentTab'
+  | 'setOperate'
+  | 'setCurrentToolInfo'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="w-[240px] h-full bg-[#f8faff] px-4 py-6 flow-tool-modal-left">
@@ -452,7 +514,16 @@ const RightHeader = ({
   setPagination,
   searchValue,
   handleInputChange,
-}): React.ReactElement => {
+}: CatalogPropsFor<
+  | 'currentTab'
+  | 'orderFlag'
+  | 'setOrderFlag'
+  | 'setLoading'
+  | 'setDataSource'
+  | 'setPagination'
+  | 'searchValue'
+  | 'handleInputChange'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div
@@ -523,7 +594,20 @@ const ListItem = ({
   handleCheckTool,
   setCurrentTool,
   setDeleteModal,
-}): React.ReactElement => {
+}: CatalogPropsFor<
+  | 'item'
+  | 'currentTab'
+  | 'setCurrentToolInfo'
+  | 'setOperate'
+  | 'operateId'
+  | 'setOperateId'
+  | 'checkedIds'
+  | 'optionsRef'
+  | 'renderParamsTooltip'
+  | 'handleCheckTool'
+  | 'setCurrentTool'
+  | 'setDeleteModal'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div
@@ -583,7 +667,7 @@ const ListItem = ({
               {t('workflow.nodes.toolNode.publishedAt')} {item?.updateTime}
             </p>
           </div>
-          {item?.params?.length > 0 ? (
+          {(item.params?.length ?? 0) > 0 ? (
             <Tooltip
               placement="right"
               title={renderParamsTooltip(item)}
@@ -727,7 +811,37 @@ const RightContent = ({
   setLoading,
   setDataSource,
   setPagination,
-}): React.ReactElement => {
+}: CatalogPropsFor<
+  | 'id'
+  | 'operate'
+  | 'currentTab'
+  | 'dataSource'
+  | 'loading'
+  | 'hasMore'
+  | 'loader'
+  | 'toolRef'
+  | 'orderBy'
+  | 'setOrderBy'
+  | 'searchValue'
+  | 'handleInputChange'
+  | 'toolsList'
+  | 'handleAddTool'
+  | 'setCurrentToolInfo'
+  | 'setOperate'
+  | 'operateId'
+  | 'setOperateId'
+  | 'checkedIds'
+  | 'optionsRef'
+  | 'renderParamsTooltip'
+  | 'handleCheckTool'
+  | 'setCurrentTool'
+  | 'setDeleteModal'
+  | 'orderFlag'
+  | 'setOrderFlag'
+  | 'setLoading'
+  | 'setDataSource'
+  | 'setPagination'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -774,7 +888,7 @@ const RightContent = ({
                     minWidth: 1000,
                   }}
                 >
-                  {dataSource.map((item: unknown) => (
+                  {dataSource.filter(isCatalogTool).map(item => (
                     <ListItem
                       item={item}
                       currentTab={currentTab}
@@ -812,7 +926,9 @@ const RightContent = ({
       {!operate && currentTab === 'knowledge' && (
         <KnowledgeList
           id={id}
-          dataSource={dataSource}
+          dataSource={dataSource.filter(
+            (item): item is KnowledgeRow => item.kind === 'knowledge'
+          )}
           toolRef={toolRef}
           orderBy={orderBy}
           setOrderBy={setOrderBy}
@@ -825,7 +941,9 @@ const RightContent = ({
       )}
       {!operate && currentTab === 'skill' && (
         <SkillList
-          dataSource={dataSource}
+          dataSource={dataSource.filter(
+            (item): item is SkillRow => item.kind === 'skill'
+          )}
           toolRef={toolRef}
           searchValue={searchValue}
           handleInputChange={handleInputChange}
@@ -853,13 +971,29 @@ const OperationContent = ({
   setBotColor,
   currentTab,
   setOperate,
-}): React.ReactElement => {
+}: CatalogPropsFor<
+  | 'operate'
+  | 'currentToolInfo'
+  | 'handleClearData'
+  | 'handleClearMCPData'
+  | 'dataSource'
+  | 'handleChangeTab'
+  | 'step'
+  | 'setStep'
+  | 'botIcon'
+  | 'setBotIcon'
+  | 'botColor'
+  | 'setBotColor'
+  | 'currentTab'
+  | 'setOperate'
+>): React.ReactElement => {
   return (
     <>
       {operate && (
         <>
           {['create', 'edit']?.includes(operate) && (
             <CreateTool
+              showHeader
               currentToolInfo={currentToolInfo}
               handleCreateToolDone={() => handleChangeTab('person')}
               step={step}
@@ -872,6 +1006,7 @@ const OperationContent = ({
           )}
           {operate === 'test' && (
             <ToolDebugger
+              selectedCard={currentToolInfo}
               currentToolInfo={currentToolInfo}
               handleClearData={() => handleClearData()}
               offical={currentTab === 'offical'}
@@ -886,7 +1021,17 @@ const OperationContent = ({
           )}
           {operate === 'mcpDetail' && (
             <MCPDetail
-              currentTool={currentToolInfo}
+              currentTool={{
+                id:
+                  currentToolInfo.id === undefined
+                    ? undefined
+                    : String(currentToolInfo.id),
+                name: currentToolInfo.name ?? '',
+                description: currentToolInfo.description ?? '',
+                icon: currentToolInfo.icon ?? '',
+                updateTime: currentToolInfo.updateTime ?? '',
+                childName: currentToolInfo.childName ?? '',
+              }}
               handleClearMCPToolDetail={handleClearMCPData}
             />
           )}
@@ -901,7 +1046,9 @@ function AddTools({
   handleAddTool,
   toolsList,
   id,
-}): React.ReactElement {
+}: CatalogPropsFor<
+  'closeToolModal' | 'handleAddTool' | 'toolsList' | 'id'
+>): React.ReactElement {
   const loader = useRef<null | HTMLDivElement>(null);
   const loadingRef = useRef<boolean>(false);
   const contentRef = useRef<string>('');
@@ -910,23 +1057,23 @@ function AddTools({
   const nodes = currentStore(state => state.nodes);
   const optionsRef = useRef<HTMLDivElement | null>(null);
   const toolRef = useRef<HTMLDivElement | null>(null);
-  const [dataSource, setDataSource] = useState([]);
-  const [currentTab, setCurrentTab] = useState('offical');
-  const [operate, setOperate] = useState('');
+  const [dataSource, setDataSource] = useState<CatalogRow[]>([]);
+  const [currentTab, setCurrentTab] = useState<CatalogTab>('offical');
+  const [operate, setOperate] = useState<CatalogOperation>('');
   const [orderFlag, setOrderFlag] = useState(0);
   const [searchValue, setSearchValue] = useState('');
   const [loading, setLoading] = useState(false);
-  const [currentToolInfo, setCurrentToolInfo] = useState({});
-  const [operateId, setOperateId] = useState('');
+  const [currentToolInfo, setCurrentToolInfo] = useState<ToolDraft>({});
+  const [operateId, setOperateId] = useState<string | number>('');
   const [deleteModal, setDeleteModal] = useState(false);
-  const [currentTool, setCurrentTool] = useState({});
+  const [currentTool, setCurrentTool] = useState<ToolDraft>({});
   const [step, setStep] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [pagination, setPagination] = useState({
     pageNo: 1,
     pageSize: 20,
   });
-  const [botIcon, setBotIcon] = useState<unknown>({});
+  const [botIcon, setBotIcon] = useState<AvatarType>({});
   const [botColor, setBotColor] = useState('');
   const [orderBy, setOrderBy] = useState('create_time');
   const checkedIds = useMemo(() => {
@@ -1003,7 +1150,7 @@ function AddTools({
     setSearchValue('');
     contentRef.current = '';
   };
-  const handleChangeTab = (tab): void => {
+  const handleChangeTab = (tab: CatalogTab): void => {
     setCurrentTab(tab);
     handleClearData();
   };
@@ -1019,13 +1166,15 @@ function AddTools({
           onClick={e => e.stopPropagation()}
           onKeyDown={e => e.stopPropagation()}
         >
-          {deleteModal && (
-            <DeletePlugin
-              currentTool={currentTool}
-              setDeleteModal={setDeleteModal}
-              getPersonTools={handleClearData}
-            />
-          )}
+          {deleteModal &&
+            currentTool.id !== undefined &&
+            currentTool.name !== undefined && (
+              <DeletePlugin
+                currentTool={{ id: currentTool.id, name: currentTool.name }}
+                setDeleteModal={setDeleteModal}
+                getPersonTools={handleClearData}
+              />
+            )}
           <div
             className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-[#fff] text-second font-medium text-md flex w-full h-full overflow-hidden"
             onClick={() => setOperateId('')}

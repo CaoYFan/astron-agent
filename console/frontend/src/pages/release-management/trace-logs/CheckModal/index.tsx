@@ -127,8 +127,10 @@ const OcrModal: React.FC<OcrModalProps> = ({ visible, onCancel, record }) => {
       const initialNode = findFirstSelectableNode(traceData);
       if (initialNode) {
         setSelectedNode(initialNode);
-        setSelectedKeys([initialNode[KEY]]);
-        setTraceId(initialNode.id);
+        setSelectedKeys(
+          initialNode[KEY] === undefined ? [] : [initialNode[KEY]]
+        );
+        setTraceId(initialNode.id ?? null);
       } else {
         setSelectedNode(null);
         setSelectedKeys([]);

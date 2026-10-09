@@ -1,3 +1,8 @@
+import type {
+  WorkflowNodeTemplate,
+  WorkflowNodeCategory,
+} from '@/components/workflow/types/domain';
+import { cloneDeep } from 'lodash';
 import React, { useState, memo, useMemo } from 'react';
 import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -17,20 +22,6 @@ import nodelistOpenIcon from '@/assets/imgs/workflow/nodelist-open-icon.png';
 import arrowRightIcon from '@/assets/imgs/common/arrowRight.png';
 
 // ========= 类型 =========
-interface NodeItem {
-  idType: string;
-  aliasName: string;
-  description?: string;
-  data: {
-    icon: string;
-  };
-}
-
-interface NodeCategory {
-  name: string;
-  nodes: NodeItem[];
-}
-
 interface NodeListProps {
   noIterator?: boolean;
   hiddenIdTypes?: string[];
@@ -53,7 +44,7 @@ const NodeList: React.FC<NodeListProps> = ({
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
-  const nodeList = useFlowsManager(state => state.nodeList) as NodeCategory[];
+  const nodeList = useFlowsManager(state => state.nodeList);
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   const showIterativeModal = useFlowsManager(state => state.showIterativeModal);
   const setWillAddNode = useFlowsManager(state => state.setWillAddNode);
@@ -63,8 +54,8 @@ const NodeList: React.FC<NodeListProps> = ({
   const [openNodeDetail, setOpenNodeDetail] = useState<boolean>(false);
   const [currentNodeId, setCurrentNodeId] = useState<string>('');
 
-  const handleDragStart = (item: NodeItem): void => {
-    setWillAddNode({ ...item });
+  const handleDragStart = (item: WorkflowNodeTemplate): void => {
+    setWillAddNode(cloneDeep(item));
   };
 
   const handleCloseNodeTemplate = (): void => {
@@ -72,7 +63,7 @@ const NodeList: React.FC<NodeListProps> = ({
     setCurrentNodeId('');
   };
 
-  const filterNodeList = useMemo<NodeCategory[]>(() => {
+  const filterNodeList = useMemo<WorkflowNodeCategory[]>(() => {
     return nodeList?.filter(node => node?.name !== '固定节点') || [];
   }, [nodeList]);
 
@@ -170,11 +161,13 @@ const NodeList: React.FC<NodeListProps> = ({
                                     <div
                                       className="w-5 h-5 rounded-sm items-center justify-center cursor-pointer hover:bg-[#efefef] group-hover:flex hidden"
                                       onClick={() => {
-                                        setWillAddNode(item);
+                                        if (!reactFlowInstance) return;
+                                        const template = cloneDeep(item);
+                                        setWillAddNode(template);
                                         handleAddNode(
-                                          item as unknown as AddNodeType,
+                                          template,
                                           generateRandomPosition(
-                                            reactFlowInstance?.getViewport()
+                                            reactFlowInstance.getViewport()
                                           )
                                         );
                                       }}

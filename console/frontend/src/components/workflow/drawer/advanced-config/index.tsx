@@ -1,3 +1,4 @@
+import type { CharacterVoiceProps } from '../../types/drawer/advanced-config';
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Drawer, Switch, Input, Upload, message } from 'antd';
 import type { UploadProps as AntdUploadProps, UploadFile } from 'antd';
@@ -227,7 +228,7 @@ const SuggestedQuestions: React.FC<CommonComponentProps> = ({
   );
 };
 
-const CharacterVoice: React.FC<CommonComponentProps> = ({
+const CharacterVoice: React.FC<CharacterVoiceProps> = ({
   advancedConfig,
   handleAdvancedConfigChange,
   updateAdvancedConfigParams,
@@ -715,7 +716,7 @@ function AdvancedConfiguration(): React.ReactElement {
               },
             });
           }}
-          currentRobot={currentFlow}
+          currentRobot={currentFlow ?? {}}
           isFlow={true}
         />
       )}

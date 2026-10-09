@@ -3,6 +3,17 @@ import { cn } from '@/utils';
 import { v4 as uuid } from 'uuid';
 import { debounce } from 'lodash';
 
+interface FlowNodeTextAreaProps
+  extends Omit<
+    React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+    'onChange' | 'value'
+  > {
+  value?: string;
+  adaptiveHeight?: boolean;
+  allowWheel?: boolean;
+  onChange: (value: string) => void;
+}
+
 function FlowNodeTextArea({
   className = '',
   value = '',
@@ -10,7 +21,7 @@ function FlowNodeTextArea({
   allowWheel = true,
   onChange,
   ...reset
-}): React.ReactElement {
+}: FlowNodeTextAreaProps): React.ReactElement {
   const textareaId = 'textarea' + uuid();
   const [textareaValue, setTextareaValue] = useState('');
 
@@ -22,7 +33,7 @@ function FlowNodeTextArea({
     const textarea = document.getElementById(textareaId);
 
     if (textarea) {
-      const handleKeyDown = (event): void => {
+      const handleKeyDown = (event: KeyboardEvent): void => {
         event.stopPropagation();
       };
 
@@ -37,7 +48,7 @@ function FlowNodeTextArea({
   useEffect((): void | (() => void) => {
     const textarea = document.getElementById(textareaId);
     if (textarea && !allowWheel) {
-      const handleWheel = (e): void => {
+      const handleWheel = (e: WheelEvent): void => {
         e.stopPropagation();
       };
 
@@ -60,13 +71,13 @@ function FlowNodeTextArea({
   }, [textareaValue, adaptiveHeight]);
 
   const handleChangeDebounce = useCallback(
-    debounce(value => {
+    debounce((value: string) => {
       onChange(value);
     }, 500),
     []
   );
 
-  const handleValueChange = useCallback(value => {
+  const handleValueChange = useCallback((value: string) => {
     setTextareaValue(value);
     handleChangeDebounce(value);
   }, []);

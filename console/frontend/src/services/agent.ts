@@ -100,13 +100,17 @@ export async function avatarImageGenerate(content: any) {
   return response;
 }
 
-export async function modelAuthStatus(appId: any) {
-  const response = await api.get(`/auth/status?appId=${appId}`);
+export async function modelAuthStatus(appId: string): Promise<unknown> {
+  const response = await api.get<unknown, unknown>(
+    `/auth/status?appId=${appId}`
+  );
   return response;
 }
 
-export async function getAutoAuthStatus(appId: any) {
-  const response = await api.get(`/auth/auto-auth/status?appId=${appId}`);
+export async function getAutoAuthStatus(appId: string): Promise<unknown> {
+  const response = await api.get<unknown, unknown>(
+    `/auth/auto-auth/status?appId=${appId}`
+  );
   return response;
 }
 

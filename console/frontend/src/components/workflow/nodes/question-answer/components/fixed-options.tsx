@@ -1,3 +1,10 @@
+import type { AnswerOption } from '@/components/workflow/types/domain';
+type ChangeAnswerOption = <Key extends keyof AnswerOption>(
+  id: string,
+  key: Key,
+  value: AnswerOption[Key]
+) => void;
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
 import React, { useMemo, useCallback } from 'react';
 import { cloneDeep } from 'lodash';
 import { v4 as uuid } from 'uuid';
@@ -8,7 +15,11 @@ import { useTranslation } from 'react-i18next';
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
 
-function index({ id, data, nodeParam }): React.ReactElement {
+function index({
+  id,
+  data,
+  nodeParam,
+}: NodePropsFor<'id' | 'data' | 'nodeParam'>): React.ReactElement {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -24,20 +35,20 @@ function index({ id, data, nodeParam }): React.ReactElement {
   const removeNodeRef = currentStore(state => state.removeNodeRef);
 
   const optionAnswer = useMemo(() => {
-    return nodeParam?.optionAnswer?.filter(item => item.type === 2);
+    return nodeParam.optionAnswer?.filter(item => item.type === 2) ?? [];
   }, [nodeParam?.optionAnswer]);
 
   const optionDefaultAnswer = useMemo(() => {
     return nodeParam?.optionAnswer?.find(item => item.type === 1);
   }, [nodeParam?.optionAnswer]);
 
-  const handleChangeOptionParma = useCallback(
+  const handleChangeOptionParma = useCallback<ChangeAnswerOption>(
     (optionId, key, value) => {
       setNode(id, old => {
         const currentOption = old?.data?.nodeParam?.optionAnswer?.find(
           item => item?.id === optionId
         );
-        currentOption[key] = value;
+        if (currentOption) currentOption[key] = value;
         return {
           ...cloneDeep(old),
         };
@@ -51,17 +62,19 @@ function index({ id, data, nodeParam }): React.ReactElement {
   const handleAddLine = useCallback(() => {
     takeSnapshot();
     setNode(id, old => {
-      const optionAnswer = old.data.nodeParam.optionAnswer;
+      const optionAnswer =
+        old.data.nodeParam.optionAnswer ??
+        (old.data.nodeParam.optionAnswer = []);
       const filterOptionAnswer = optionAnswer?.filter(item => item.type === 2);
       const length = old?.data?.nodeParam?.needReply
         ? optionAnswer?.length
         : optionAnswer?.length - 1;
-      old.data.nodeParam.optionAnswer.splice(length, 0, {
+      optionAnswer.splice(Math.max(0, length), 0, {
         id: `option-one-of::${uuid()}`,
         name: String.fromCharCode(
-          filterOptionAnswer?.[
-            filterOptionAnswer?.length - 1
-          ]?.name?.charCodeAt(0) + 1
+          (filterOptionAnswer[filterOptionAnswer.length - 1]?.name?.charCodeAt(
+            0
+          ) ?? 'A'.charCodeAt(0) - 1) + 1
         ),
         type: 2,
         content: '',
@@ -75,7 +88,7 @@ function index({ id, data, nodeParam }): React.ReactElement {
   }, [setNode, canPublishSetNot, takeSnapshot]);
 
   const handleRemoveLine = useCallback(
-    optionId => {
+    (optionId: string) => {
       takeSnapshot();
       setNode(id, old => {
         old.data.nodeParam.optionAnswer = old.data.nodeParam.optionAnswer
@@ -99,7 +112,7 @@ function index({ id, data, nodeParam }): React.ReactElement {
       const othersEdges = edges.filter(
         item => item.source !== edge?.source && item.target === edge?.target
       );
-      if (othersEdges.length > 0) {
+      if (edge && othersEdges.length > 0) {
         removeNodeRef(edge.source, edge.target);
       }
       setEdges(edges => edges.filter(edge => edge.sourceHandle !== optionId));

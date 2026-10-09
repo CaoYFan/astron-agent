@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import useUserStore from '@/store/user-store';
 import { RoleType } from '@/types/permission';
 
@@ -21,8 +21,9 @@ export const useUserStoreHook = () => {
     return user.roleType === RoleType.MEMBER;
   }, [user]);
 
-  const permissionParams: any = useMemo(() => {
+  const permissionParams = useMemo(() => {
     const { spaceType, roleType } = user;
+    if (!spaceType || !roleType) return undefined;
     return {
       spaceType,
       roleType,
@@ -30,7 +31,15 @@ export const useUserStoreHook = () => {
   }, [user]);
 
   const isExpires = useMemo(() => {
-    return user.expiresAt && user.expiresAt < Date.now();
+    const expiresAt = user.expiresAt;
+    if (!expiresAt) return false;
+    const timestamp =
+      typeof expiresAt === 'number'
+        ? expiresAt
+        : typeof expiresAt === 'string'
+          ? Number(expiresAt)
+          : NaN;
+    return Number.isFinite(timestamp) && timestamp < Date.now();
   }, [user]);
 
   const returnValues = useMemo(

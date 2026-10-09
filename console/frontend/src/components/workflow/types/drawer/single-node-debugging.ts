@@ -1,9 +1,11 @@
+import type { RefInput } from './chat-debugger';
+
 export interface UseSingleNodeDebuggingReturn {
   handleRun: () => void;
-  handleChangeParam: (
+  handleChangeParam: <Value>(
     index: number,
-    fn: (data: unknown, value: unknown) => void,
-    value: unknown
+    fn: (data: RefInput, value: Value) => void,
+    value: Value
   ) => void;
   uploadComplete: (
     event: ProgressEvent<EventTarget>,

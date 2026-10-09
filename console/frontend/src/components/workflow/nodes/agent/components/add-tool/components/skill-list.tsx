@@ -1,3 +1,14 @@
+import type { SkillImportItem } from '@/types/skill';
+import type { ToolItem } from '@/components/workflow/types/nodes/agent';
+interface SkillListProps {
+  dataSource: SkillImportItem[];
+  toolRef: React.RefObject<HTMLDivElement>;
+  searchValue: string;
+  handleInputChange: React.ChangeEventHandler<HTMLInputElement>;
+  toolsList: ToolItem[];
+  loading: boolean;
+  handleAddTool: (tool: ToolItem) => void;
+}
 import React, { useMemo, useCallback } from 'react';
 import { Button, message } from 'antd';
 import { FlowInput } from '@/components/workflow/ui';
@@ -9,7 +20,10 @@ import toolModalAdd from '@/assets/imgs/workflow/tool-modal-add.png';
 const SkillToolbar = ({
   searchValue,
   handleInputChange,
-}): React.ReactElement => {
+}: Pick<
+  SkillListProps,
+  'searchValue' | 'handleInputChange'
+>): React.ReactElement => {
   return (
     <div
       className="flex items-center justify-between mx-auto"
@@ -59,20 +73,21 @@ function SkillList({
   toolsList,
   loading,
   handleAddTool,
-}): React.ReactElement {
+}: SkillListProps): React.ReactElement {
   const { t } = useTranslation();
   const checkedIds = useMemo(() => {
     return toolsList?.map(item => item?.toolId) || [];
   }, [toolsList]);
 
   const handleChangeSkill = useCallback(
-    (skill): void => {
+    (skill: SkillImportItem): void => {
       if (!checkedIds.includes(String(skill?.id)) && checkedIds?.length >= 30) {
         message.warning(t('workflow.nodes.common.maxAddWarning'));
         return;
       }
       handleAddTool({
         ...skill,
+        id: String(skill.id),
         toolId: String(skill?.id),
         name: skill?.name,
         description: skill?.description,

@@ -5,13 +5,19 @@ import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { useTranslation } from 'react-i18next';
 import { useMemoizedFn } from 'ahooks';
 
+interface FlowNodeInputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
+  nodeId: string;
+  onChange: (value: string) => void;
+}
+
 function FlowNodeInput({
   nodeId,
   className = '',
   value,
   onChange,
   ...reset
-}): React.ReactElement {
+}: FlowNodeInputProps): React.ReactElement {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -21,7 +27,8 @@ function FlowNodeInput({
     state => state.updateNodeInputData
   );
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] =
+    useState<React.InputHTMLAttributes<HTMLInputElement>['value']>('');
 
   useEffect(() => {
     setInputValue(value);
@@ -38,23 +45,14 @@ function FlowNodeInput({
     const input = inputRef.current;
 
     if (input) {
-      const handleKeyDown = (
-        event: React.KeyboardEvent<HTMLInputElement>
-      ): void => {
+      const handleKeyDown = (event: KeyboardEvent): void => {
         event.stopPropagation();
       };
 
-      // 需要类型断言，因为原生addEventListener期望的是原生事件
-      input.addEventListener(
-        'keydown',
-        handleKeyDown as unknown as EventListener
-      );
+      input.addEventListener('keydown', handleKeyDown);
 
       return (): void => {
-        input.removeEventListener(
-          'keydown',
-          handleKeyDown as unknown as EventListener
-        );
+        input.removeEventListener('keydown', handleKeyDown);
       };
     }
   }, []);

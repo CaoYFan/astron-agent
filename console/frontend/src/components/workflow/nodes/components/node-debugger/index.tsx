@@ -1,3 +1,7 @@
+import type {
+  ChatDebuggerNodeData,
+  NodeDebuggerResult,
+} from '@/components/workflow/types/drawer/chat-debugger';
 import React, { useState, useMemo, useRef, useEffect, memo } from 'react';
 import JSONPretty from 'react-json-view';
 import { cloneDeep } from 'lodash';
@@ -10,12 +14,32 @@ import i18next from 'i18next';
 import { useMemoizedFn } from 'ahooks';
 import { Icons } from '@/components/workflow/icons';
 
+type CopyData = (text: string | undefined) => void;
+type ResultProps<Key extends keyof NodeDebuggerResult> = Pick<
+  NodeDebuggerResult,
+  Key
+> & {
+  copyData: CopyData;
+};
+
+interface DebuggingStatusProps {
+  id: string;
+  status: ChatDebuggerNodeData['status'];
+  debuggerResult?: NodeDebuggerResult;
+  openResultModal?: boolean;
+}
+
+interface DebuggingResultProps {
+  setShowModal: (show: boolean) => void;
+  debuggerResult?: NodeDebuggerResult;
+}
+
 const NodeDebuggingStatusNoMemo = ({
   id,
   status,
   debuggerResult,
   openResultModal = false,
-}): React.ReactElement => {
+}: DebuggingStatusProps): React.ReactElement => {
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
   const setNodes = currentStore(state => state.setNodes);
@@ -46,7 +70,7 @@ const NodeDebuggingStatusNoMemo = ({
       color:
         status === 'running'
           ? '#FFF'
-          : status === 'cancal'
+          : status === 'cancel'
             ? '#FF9645'
             : status === 'success'
               ? '#86D2A8'
@@ -143,7 +167,15 @@ const NodeDebuggingStatusNoMemo = ({
   );
 };
 
-function ResultBlock({ title, onCopy, children }): React.ReactElement {
+function ResultBlock({
+  title,
+  onCopy,
+  children,
+}: {
+  title: string;
+  onCopy: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
   return (
     <div className="flex flex-col rounded-lg bg-[#F7F7F7]">
       <div
@@ -163,8 +195,12 @@ function ResultBlock({ title, onCopy, children }): React.ReactElement {
   );
 }
 
-function InputResult({ input, copyData }): React.ReactElement {
-  if (!input || Object.keys(input).length === 0) return null;
+function InputResult({
+  input,
+  copyData,
+}: ResultProps<'input'>): React.ReactElement | null {
+  if (!input || typeof input !== 'object' || Object.keys(input).length === 0)
+    return null;
   return (
     <div className="flex flex-col rounded-lg bg-[#F7F7F7]">
       <div
@@ -176,7 +212,7 @@ function InputResult({ input, copyData }): React.ReactElement {
             {i18next.t('workflow.nodes.common.input')}
           </span>
           <span className="text-xs text-[#FF9645]">
-            {Object.hasOwn(input, 'chatHistory') ? (
+            {Object.prototype.hasOwnProperty.call(input, 'chatHistory') ? (
               <div className="flex items-center gap-1">
                 <InfoCircleOutlined />
                 <span>
@@ -202,19 +238,31 @@ function InputResult({ input, copyData }): React.ReactElement {
   );
 }
 
-function RawOutputResult({ rawOutput, copyData }): React.ReactElement {
+function RawOutputResult({
+  rawOutput,
+  copyData,
+}: ResultProps<'rawOutput'>): React.ReactElement | null {
   if (!rawOutput) return null;
   return (
     <ResultBlock
       title={i18next.t('workflow.nodes.flowChatResult.rawOutput')}
-      onCopy={() => copyData(rawOutput)}
+      onCopy={() =>
+        copyData(
+          typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput)
+        )
+      }
     >
-      <div className="p-4 break-all">{rawOutput}</div>
+      <div className="p-4 break-all">
+        {typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput)}
+      </div>
     </ResultBlock>
   );
 }
 
-function OutputResult({ output, copyData }): React.ReactElement {
+function OutputResult({
+  output,
+  copyData,
+}: ResultProps<'output'>): React.ReactElement | null {
   if (!output || typeof output !== 'object' || Object.keys(output).length === 0)
     return null;
   return (
@@ -232,7 +280,7 @@ function OutputResult({ output, copyData }): React.ReactElement {
 function ReasoningContentResult({
   reasoningContent,
   copyData,
-}): React.ReactElement {
+}: ResultProps<'reasoningContent'>): React.ReactElement | null {
   if (!reasoningContent) return null;
   return (
     <ResultBlock
@@ -250,7 +298,7 @@ function AnswerContentResult({
   answerMode,
   answerContent,
   copyData,
-}): React.ReactElement {
+}: ResultProps<'answerMode' | 'answerContent'>): React.ReactElement | null {
   if (answerMode !== 1) return null;
   return (
     <ResultBlock
@@ -258,13 +306,16 @@ function AnswerContentResult({
       onCopy={() => copyData(JSON.stringify(answerContent))}
     >
       <div className="bg-[#f7f7f7] p-3.5 small-size-markdown">
-        <MarkdownRender content={answerContent} isSending={false} />
+        <MarkdownRender content={answerContent ?? ''} isSending={false} />
       </div>
     </ResultBlock>
   );
 }
 
-function ErrorOutputsResult({ errorOutputs, copyData }): React.ReactElement {
+function ErrorOutputsResult({
+  errorOutputs,
+  copyData,
+}: ResultProps<'errorOutputs'>): React.ReactElement | null {
   if (
     !errorOutputs ||
     typeof errorOutputs !== 'object' ||
@@ -283,7 +334,10 @@ function ErrorOutputsResult({ errorOutputs, copyData }): React.ReactElement {
   );
 }
 
-function FailedReasonResult({ failedReason, copyData }): React.ReactElement {
+function FailedReasonResult({
+  failedReason,
+  copyData,
+}: ResultProps<'failedReason'>): React.ReactElement | null {
   if (!failedReason) return null;
   return (
     <ResultBlock
@@ -295,7 +349,10 @@ function FailedReasonResult({ failedReason, copyData }): React.ReactElement {
   );
 }
 
-function CancelReasonResult({ cancelReason, copyData }): React.ReactElement {
+function CancelReasonResult({
+  cancelReason,
+  copyData,
+}: ResultProps<'cancelReason'>): React.ReactElement | null {
   if (!cancelReason) return null;
   return (
     <ResultBlock
@@ -310,7 +367,7 @@ function CancelReasonResult({ cancelReason, copyData }): React.ReactElement {
 function NodeDebuggingResult({
   setShowModal,
   debuggerResult,
-}): React.ReactElement {
+}: DebuggingResultProps): React.ReactElement {
   const consultRef = useRef<HTMLDivElement | null>(null);
 
   useEffect((): void | (() => void) => {
@@ -324,8 +381,8 @@ function NodeDebuggingResult({
     }
   }, []);
 
-  const copyData = useMemoizedFn((data): void => {
-    copy(data);
+  const copyData = useMemoizedFn((data: string | undefined): void => {
+    copy(data ?? '');
     message.success(i18next.t('workflow.nodes.flowChatResult.copySuccess'));
   });
 

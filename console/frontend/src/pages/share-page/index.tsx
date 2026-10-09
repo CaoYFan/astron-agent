@@ -64,11 +64,10 @@ function index() {
     }
   }, [inviteInfo]);
 
-  const handleJoinSpace = () => {
+  const handleJoinSpace = (): void => {
     if (!inviteInfo?.isBelong) {
-      return message.warning(
-        `您已不在${inviteInfo?.type == 1 ? '空间' : '团队'}`
-      );
+      message.warning(`您已不在${inviteInfo?.type == 1 ? '空间' : '团队'}`);
+      return;
     }
     if (inviteInfo?.type == 1) {
       visitSpace(inviteInfo?.spaceId)

@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { Button, message } from 'antd';
+import { Button } from 'antd';
 import { deleteTool } from '@/services/plugin';
 import dialogDel from '@/assets/imgs/main/icon_dialog_del.png';
+
+interface DeletePluginProps {
+  setDeleteModal: (open: boolean) => void;
+  currentTool: { id: string | number; name: string };
+  getPersonTools: () => void;
+}
 
 function DeleteModal({
   setDeleteModal,
   currentTool,
   getPersonTools,
-}): React.ReactElement {
+}: DeletePluginProps): React.ReactElement {
   const [loading, setLoading] = useState(false);
 
   function handleDelete(): void {

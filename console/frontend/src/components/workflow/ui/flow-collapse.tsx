@@ -1,15 +1,20 @@
 import React, { memo } from 'react';
-import { Collapse } from 'antd';
+import { Collapse, type CollapseProps } from 'antd';
 import { cn } from '@/utils';
 
 import downIcon from '@/assets/imgs/workflow/flow-part-down.svg';
+
+interface FlowCollapseProps extends Omit<CollapseProps, 'items'> {
+  label: React.ReactNode;
+  content: React.ReactNode;
+}
 
 function FLowCollapse({
   label,
   content,
   className = '',
   ...reset
-}): React.ReactElement {
+}: FlowCollapseProps): React.ReactElement {
   return (
     <Collapse
       defaultActiveKey="1"

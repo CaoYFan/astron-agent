@@ -23,26 +23,10 @@ import creatorImg from '@/assets/imgs/space/person-space-icon.svg';
 
 import { searchInviteUsers, getUserLimit } from './config';
 import { MEMBER_ROLE } from '@/pages/space/config';
-
-interface User {
-  uid: string;
-  nickname: string;
-  mobile: string;
-  avatar?: string;
-  status?: number; // 0：未加入，1：已加入，2：确认中 ,
-  role?: string;
-  username?: string;
-}
-
-interface SelectedUser {
-  uid: string;
-  nickname: string;
-  mobile: string;
-  avatar?: string;
-  role: string;
-  status?: number;
-  username?: string;
-}
+import type {
+  InviteUser as User,
+  SelectedInviteUser as SelectedUser,
+} from './types';
 
 interface AddMemberModalProps {
   title?: React.ReactNode;

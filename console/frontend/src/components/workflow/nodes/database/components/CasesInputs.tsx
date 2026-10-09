@@ -1,3 +1,14 @@
+import { inputReference } from '@/components/workflow/nodes/types';
+import { isPresent } from '@/components/workflow/nodes/database/types';
+import type {
+  DatabasePropsFor,
+  DatabaseFieldOption,
+} from '@/components/workflow/nodes/database/types';
+
+import type {
+  WorkflowInput,
+  WorkflowCondition,
+} from '@/components/workflow/types/domain';
 import React, {
   useMemo,
   useCallback,
@@ -19,11 +30,6 @@ import {
 } from '@/components/workflow/ui';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import {
-  UseConditionActionsReturnProps,
-  UseInputHelpersReturnProps,
-  UseNotInModalReturnProps,
-} from '@/components/workflow/types';
 
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
@@ -33,7 +39,10 @@ import arrowDownIcon from '@/assets/imgs/workflow/arrow-down-icon.png';
 import { conditions } from '@/constants';
 
 const ModalContext = createContext<string | null>(null);
-const CaseTitle = ({ item, mode }): React.ReactElement => {
+const CaseTitle = ({
+  item,
+  mode,
+}: DatabasePropsFor<'item' | 'mode'>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="flex items-center mt-2">
@@ -63,7 +72,13 @@ const OperatorSelect = ({
   operatorRef,
   operatorId,
   handleOperatorChange,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'item'
+  | 'setOperatorId'
+  | 'operatorRef'
+  | 'operatorId'
+  | 'handleOperatorChange'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="flex-shrink-0 w-[50px] mr-4 my-4">
@@ -145,15 +160,35 @@ const ConditionRow = ({
   handleNotInClick,
   getTextArray,
   handleRemoveLine,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'condition'
+  | 'handleFieldChange'
+  | 'handleConditionChange'
+  | 'checkNode'
+  | 'id'
+  | 'getFieldOptions'
+  | 'getConditionOptions'
+  | 'handleChangeInputParam'
+  | 'references'
+  | 'item'
+  | 'mode'
+  | 'curentInput'
+  | 'handleNotInClick'
+  | 'getTextArray'
+  | 'handleRemoveLine'
+>): React.ReactElement | null => {
   const { t } = useTranslation();
+  const varIndex = condition.varIndex;
+  const selectedInput = curentInput(condition);
+  const reference = inputReference(selectedInput);
+  if (!varIndex) return null;
   return (
     <div>
       <div className="flex flex-col mt-2.5 overflow-hidden">
         <div className="flex-1 flex items-center text-desc gap-2.5">
           <div className="w-1/4">
             <FlowSelect
-              value={condition.fieldName}
+              value={condition.fieldName ?? undefined}
               onChange={value => handleFieldChange(value, condition)}
               options={getFieldOptions(condition.selectCondition)}
               onBlur={() => checkNode(id)}
@@ -161,7 +196,7 @@ const ConditionRow = ({
           </div>
           <div className="flex-1">
             <FlowSelect
-              value={condition.selectCondition}
+              value={condition.selectCondition ?? undefined}
               onChange={value => handleConditionChange(value, condition)}
               options={getConditionOptions(condition.fieldType)}
               onBlur={() => {
@@ -173,9 +208,9 @@ const ConditionRow = ({
           <div className="flex-1">
             <FlowSelect
               disabled={['not null', 'null'].includes(
-                condition.selectCondition
+                condition.selectCondition ?? ''
               )}
-              value={curentInput(condition)?.schema?.value?.type}
+              value={selectedInput?.schema.value.type}
               options={[
                 {
                   label: t('workflow.nodes.databaseNode.literal'),
@@ -188,14 +223,12 @@ const ConditionRow = ({
               ]}
               onChange={value =>
                 handleChangeInputParam(
-                  condition.varIndex,
+                  varIndex,
                   (data, value) => {
-                    data.schema.value.type = value;
-                    if (value === 'literal') {
-                      data.schema.value.content = '';
-                    } else {
-                      data.schema.value.content = {};
-                    }
+                    data.schema.value =
+                      value === 'literal'
+                        ? { ...data.schema.value, type: 'literal', content: '' }
+                        : { ...data.schema.value, type: 'ref', content: {} };
                   },
                   value
                 )
@@ -203,8 +236,8 @@ const ConditionRow = ({
             />
           </div>
           <div className="w-1/4">
-            {curentInput(condition)?.schema?.value?.type === 'literal' ? (
-              ['in', 'not in'].includes(condition.selectCondition) ? (
+            {selectedInput?.schema.value.type === 'literal' ? (
+              ['in', 'not in'].includes(condition.selectCondition ?? '') ? (
                 <label
                   onClick={() => handleNotInClick(condition)}
                   className="cursor-pointer"
@@ -222,12 +255,16 @@ const ConditionRow = ({
                   nodeId={id}
                   key={condition.selectCondition}
                   disabled={['not null', 'null'].includes(
-                    condition.selectCondition
+                    condition.selectCondition ?? ''
                   )}
-                  value={curentInput(condition)?.schema?.value?.content}
+                  value={
+                    typeof selectedInput?.schema.value.content === 'string'
+                      ? selectedInput.schema.value.content
+                      : ''
+                  }
                   onChange={value =>
                     handleChangeInputParam(
-                      condition.varIndex,
+                      varIndex,
                       (data, value) => {
                         data.schema.value.content = value;
                       },
@@ -239,17 +276,14 @@ const ConditionRow = ({
             ) : (
               <FlowCascader
                 value={
-                  curentInput(condition)?.schema?.value?.content?.nodeId
-                    ? [
-                        curentInput(condition)?.schema?.value?.content?.nodeId,
-                        curentInput(condition)?.schema?.value?.content?.name,
-                      ]
+                  reference?.nodeId
+                    ? [reference.nodeId, reference.name].filter(isPresent)
                     : []
                 }
                 options={references}
                 handleTreeSelect={node => {
                   handleChangeInputParam(
-                    condition.varIndex,
+                    varIndex,
                     (data, value) => {
                       data.schema.value.content = value.content;
                       // data.schema.type = value.type;
@@ -284,7 +318,7 @@ const ConditionRow = ({
           </div>
           <div className="flex flex-col flex-1"></div>
           <div className="flex flex-col w-1/4">
-            {curentInput(condition)?.schema?.value?.contentErrMsg}
+            {selectedInput?.schema.value.contentErrMsg}
           </div>
           {(item?.conditions?.length > 1 || mode === 3) && (
             <span className="flex-shrink-0 w-4"></span>
@@ -314,7 +348,26 @@ const ConditionList = ({
   handleNotInClick,
   getTextArray,
   handleRemoveLine,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'item'
+  | 'setOperatorId'
+  | 'operatorRef'
+  | 'operatorId'
+  | 'handleOperatorChange'
+  | 'handleFieldChange'
+  | 'handleConditionChange'
+  | 'checkNode'
+  | 'id'
+  | 'getFieldOptions'
+  | 'getConditionOptions'
+  | 'handleChangeInputParam'
+  | 'references'
+  | 'mode'
+  | 'curentInput'
+  | 'handleNotInClick'
+  | 'getTextArray'
+  | 'handleRemoveLine'
+>): React.ReactElement => {
   return (
     <div className="flex w-full">
       {item?.conditions.length > 1 && (
@@ -359,7 +412,14 @@ const useConditionActions = ({
   autoSaveCurrentFlow,
   canPublishSetNot,
   fieldOptions,
-}): UseConditionActionsReturnProps => {
+}: DatabasePropsFor<
+  | 'id'
+  | 'setNode'
+  | 'takeSnapshot'
+  | 'autoSaveCurrentFlow'
+  | 'canPublishSetNot'
+  | 'fieldOptions'
+>) => {
   const handleAddLine = useCallback(() => {
     takeSnapshot();
     setNode(id, old => {
@@ -382,7 +442,8 @@ const useConditionActions = ({
           },
         },
       ];
-      const currentCase = old?.data?.nodeParam?.cases[0];
+      const currentCase = old.data.nodeParam.cases?.[0];
+      if (!currentCase) return old;
       currentCase.conditions.push({
         id: uuid(),
         fieldName: null,
@@ -398,13 +459,14 @@ const useConditionActions = ({
     canPublishSetNot();
   }, [takeSnapshot]);
   const handleRemoveLine = useCallback(
-    (currentCondition): void => {
+    (currentCondition: WorkflowCondition): void => {
       takeSnapshot();
       setNode(id, old => {
         old.data.inputs = old.data.inputs?.filter(
           input => input.id !== currentCondition.varIndex
         );
-        const currentCase = old?.data?.nodeParam?.cases[0];
+        const currentCase = old.data.nodeParam.cases?.[0];
+        if (!currentCase) return old;
         currentCase.conditions = currentCase.conditions.filter(
           condition => condition.varIndex !== currentCondition.varIndex
         );
@@ -417,9 +479,10 @@ const useConditionActions = ({
     [takeSnapshot]
   );
   const handleOperatorChange = useCallback(
-    (value): void => {
+    (value: string): void => {
       setNode(id, old => {
-        const currentCase = old.data.nodeParam.cases[0];
+        const currentCase = old.data.nodeParam.cases?.[0];
+        if (!currentCase) return old;
         currentCase.logicalOperator = value;
         return {
           ...cloneDeep(old),
@@ -430,15 +493,19 @@ const useConditionActions = ({
     [setNode, autoSaveCurrentFlow]
   );
   const handleConditionChange = useCallback(
-    (value, currentCondition): void => {
+    (value: string, currentCondition: WorkflowCondition): void => {
       setNode(id, old => {
         currentCondition.selectCondition = value;
         const currentInput = old.data.inputs.find(
           input => input.id === currentCondition.varIndex
         );
+        if (!currentInput) return old;
         if (['not null', 'null'].includes(value)) {
-          currentInput.schema.value.type = 'literal';
-          currentInput.schema.value.content = '';
+          currentInput.schema.value = {
+            ...currentInput.schema.value,
+            type: 'literal',
+            content: '',
+          };
         }
         if (['not in', 'in'].includes(value)) {
           if (currentInput.schema.value.type === 'literal') {
@@ -455,16 +522,17 @@ const useConditionActions = ({
     [setNode, canPublishSetNot, autoSaveCurrentFlow]
   );
   const handleFieldChange = useCallback(
-    (value, currentCondition): void => {
+    (value: string, currentCondition: WorkflowCondition): void => {
       setNode(id, old => {
         const currentInput = old.data.inputs.find(
           input => input.id === currentCondition.varIndex
         );
         const item = fieldOptions.find(item => item.name === value);
+        if (!currentInput || !item) return old;
         currentInput.schema.type = item.type.toLowerCase();
         currentCondition.fieldType = item.type;
         currentCondition.fieldName = value;
-        if (['in', 'not in'].includes(currentCondition.selectCondition)) {
+        if (['in', 'not in'].includes(currentCondition.selectCondition ?? '')) {
           if (currentInput.schema.value.type === 'literal') {
             currentInput.schema.value.content = '';
           }
@@ -485,14 +553,14 @@ const useConditionActions = ({
   };
 };
 
-const useInputHelpers = ({ inputs }): UseInputHelpersReturnProps => {
+const useInputHelpers = ({ inputs }: DatabasePropsFor<'inputs'>) => {
   const curentInput = useCallback(
-    (activeCondition): unknown => {
+    (activeCondition: WorkflowCondition): WorkflowInput | undefined => {
       return inputs?.find(input => input.id === activeCondition.varIndex);
     },
     [inputs]
   );
-  const getTextArray = (activeCondition): unknown => {
+  const getTextArray = (activeCondition: WorkflowCondition): string => {
     const content = inputs?.find(input => input.id === activeCondition.varIndex)
       ?.schema?.value?.content;
     if (!Array.isArray(content) || !content.length) {
@@ -513,34 +581,42 @@ const useNotInModal = ({
   id,
   delayCheckNode,
   modal,
-}): UseNotInModalReturnProps => {
+}: DatabasePropsFor<
+  | 'inputs'
+  | 'setValidateMsg'
+  | 'handleChangeInputParam'
+  | 'id'
+  | 'delayCheckNode'
+  | 'modal'
+>) => {
   const { t } = useTranslation();
-  const checkArrayElementsType = (arr, type): boolean => {
+  const checkArrayElementsType = (arr: unknown[], type: string): boolean => {
     if (!arr || arr.length === 0) return true;
-    const validators = {
+    const validators: Record<string, (value: unknown) => boolean> = {
       string: (v): boolean => typeof v === 'string',
       number: (v): boolean => typeof v === 'number' && !Number.isNaN(v),
-      integer: (v): boolean => Number.isInteger(v),
+      integer: (v): boolean => typeof v === 'number' && Number.isInteger(v),
     };
-    if (!Object.hasOwn(validators, type)) {
-      throw new Error();
-    }
-
     const validate = validators[type];
+    if (!validate) throw new Error('Unsupported database array type');
     return arr.every(validate);
   };
-  const handleNotInClick = async (activeCondition): Promise<void> => {
+  const handleNotInClick = async (
+    activeCondition: WorkflowCondition
+  ): Promise<void> => {
+    const varIndex = activeCondition.varIndex;
+    if (!varIndex) return;
     setValidateMsg('');
     const { fieldType } = activeCondition;
-    let inputValue = inputs?.find(
-      input => input.id === activeCondition.varIndex
-    )?.schema?.value?.content;
-    if (!inputValue) {
-      inputValue = [];
-    }
-    const handleInputChange = (value): void => {
+    const selectedInput = inputs.find(input => input.id === varIndex);
+    let inputValue =
+      selectedInput?.schema.value.type === 'literal'
+        ? selectedInput.schema.value.content
+        : [];
+    if (!inputValue) inputValue = [];
+    const handleInputChange = (value: string | undefined): void => {
       setValidateMsg('');
-      inputValue = value;
+      inputValue = value ?? '';
     };
 
     const handleDocumentPaste = (e: KeyboardEvent): void => {
@@ -574,7 +650,7 @@ const useNotInModal = ({
                 <JsonMonacoEditor
                   defaultValue={JSON.stringify(inputValue, null, 2)}
                   onChange={handleInputChange}
-                  onValidate={markers => {
+                  onValidate={(markers: { message: string }[]) => {
                     markers.forEach(m => {
                       if (m.message) {
                         setValidateMsg(
@@ -593,11 +669,18 @@ const useNotInModal = ({
       centered: true,
       onOk(): Promise<void> {
         try {
-          const parsed =
+          const parsed: unknown =
             typeof inputValue === 'string'
               ? JSON.parse(inputValue)
               : inputValue;
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (
+            Array.isArray(parsed) &&
+            parsed.length > 0 &&
+            parsed.every(
+              (entry: unknown): entry is string | number =>
+                typeof entry === 'string' || typeof entry === 'number'
+            )
+          ) {
             if (fieldType) {
               const validateType = checkArrayElementsType(
                 parsed,
@@ -608,7 +691,7 @@ const useNotInModal = ({
               }
             }
             handleChangeInputParam(
-              activeCondition.varIndex,
+              varIndex,
               (data, value) => {
                 data.schema.value.content = value;
                 data.schema.type = fieldType
@@ -634,7 +717,14 @@ const useNotInModal = ({
   };
 };
 
-function index({ id, data, allFields = [], children }): React.ReactElement {
+function index({
+  id,
+  data,
+  allFields = [],
+  children,
+}: DatabasePropsFor<
+  'id' | 'data' | 'allFields' | 'children'
+>): React.ReactElement {
   const { t } = useTranslation();
   const { handleChangeInputParam, references, inputs } = useNodeCommon({
     id,
@@ -656,7 +746,7 @@ function index({ id, data, allFields = [], children }): React.ReactElement {
   const operatorRef = useRef<HTMLDivElement | null>(null);
   const [operatorId, setOperatorId] = useState('');
   const fieldOptions = useMemo(() => {
-    return allFields.map((it: unknown) => {
+    return allFields.map(it => {
       return {
         ...it,
         label: it.name,
@@ -693,7 +783,7 @@ function index({ id, data, allFields = [], children }): React.ReactElement {
           ],
         },
       ];
-      const initInput = [
+      const initInput: WorkflowInput[] = [
         {
           id: uid,
           name: uid,
@@ -724,7 +814,11 @@ function index({ id, data, allFields = [], children }): React.ReactElement {
 
   useEffect((): void | (() => void) => {
     function clickOutside(event: MouseEvent): void {
-      if (operatorRef.current && !operatorRef.current.contains(event.target)) {
+      if (
+        operatorRef.current &&
+        event.target instanceof Node &&
+        !operatorRef.current.contains(event.target)
+      ) {
         setOperatorId('');
       }
     }
@@ -762,15 +856,19 @@ function index({ id, data, allFields = [], children }): React.ReactElement {
     modal,
   });
 
-  const getConditionOptions = (type): unknown => {
+  const getConditionOptions = (
+    type: string | null | undefined
+  ): { label: string; value: string }[] => {
     if (type === 'time' || type === 'boolean') {
       return conditions.filter(item => !['in', 'not in'].includes(item.value));
     }
     return conditions;
   };
 
-  const getFieldOptions = (selectCondition): unknown => {
-    if (['in', 'not in'].includes(selectCondition)) {
+  const getFieldOptions = (
+    selectCondition: string | null | undefined
+  ): DatabaseFieldOption[] => {
+    if (['in', 'not in'].includes(selectCondition ?? '')) {
       return fieldOptions.filter(
         item => item.type !== 'time' && item.type !== 'boolean'
       );

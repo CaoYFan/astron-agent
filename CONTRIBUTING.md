@@ -243,6 +243,41 @@ make test-typescript
 make test-coverage
 ```
 
+### Frontend verification
+
+Use Node.js 20, matching the CI runner, from `console/frontend`:
+
+```bash
+npm ci --legacy-peer-deps
+npm run format:check
+npm run type-check
+npm run lint
+npm run test:unit
+npm run build
+```
+
+TypeScript diagnostics and ESLint errors fail CI. ESLint warnings are printed
+without `--quiet`; the existing warning severities remain visible debt, not proof
+that every warning has been resolved. The no-warning quality requirement above
+remains the target. Review new warnings in changed code and report any remaining
+warnings in the pull request:
+
+| Warning category | Required follow-up |
+| --- | --- |
+| Explicit `any` and non-null assertions | Check the actual API or state contract; use concrete types and runtime narrowing where inputs are untrusted. |
+| Missing return annotations | Add useful public contracts; review inferred generic hook signatures before annotating them. |
+| Unused declarations | Remove obsolete code/imports after checking side effects. |
+| Console output | Review whether production diagnostics are needed and whether the values are appropriate to log. |
+| Complexity, function length and parameter count | Add behavior tests before splitting functions; do not suppress the warning merely to pass a check. |
+| Formatting | Run Prettier. The repository uses LF; a Windows CRLF checkout can produce line-ending warnings. |
+
+`npm run test:unit` discovers JavaScript `*.test.js` regressions in `_tests_` and
+under `src`, including workflow editor state, schema handling, debugger request
+conversion, and API payload normalization. These isolated tests do not replace
+browser interaction or live backend integration testing. When changing workflow
+inputs, keep editable literal values separate from parsed debugger request
+values and test both the editor state and the generated request.
+
 ### Test Requirements
 
 - All new features must include tests

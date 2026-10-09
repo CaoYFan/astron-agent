@@ -1,6 +1,7 @@
 // Advanced Configuration 模块的类型定义
 
 import { TFunction } from 'i18next';
+import type { UploadProps as AntdUploadProps } from 'antd';
 import { VcnItem } from '@/components/speaker-modal';
 
 // 聊天背景信息类型定义
@@ -44,7 +45,7 @@ export interface UploadResponse {
   };
 }
 
-export type UploadProps = Record<string, any>;
+export type UploadProps = AntdUploadProps;
 
 // 抽屉样式类型定义
 export interface DrawerStyleType {
@@ -73,8 +74,11 @@ export interface CommonComponentProps {
   advancedConfig: AdvancedConfigType;
   handleAdvancedConfigChange: (callback: () => void) => void;
   updateAdvancedConfigParams: (updateParams: AdvancedConfigUpdate) => void;
-  vcnList: VcnItem[];
   t: TFunction;
+}
+
+export interface CharacterVoiceProps extends CommonComponentProps {
+  vcnList: VcnItem[];
 }
 
 export interface ConversationStarterProps extends CommonComponentProps {

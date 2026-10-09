@@ -53,12 +53,14 @@ function FallbackInput({
     return (
       <FlowSelect
         disabled={disabled}
-        value={fallbackValue}
+        value={
+          typeof fallbackValue === 'boolean' ? String(fallbackValue) : undefined
+        }
         options={[
-          { label: 'true', value: true },
-          { label: 'false', value: false },
+          { label: 'true', value: 'true' },
+          { label: 'false', value: 'false' },
         ]}
-        onChange={(value: any) => updateFallbackValue(value)}
+        onChange={(value: string) => updateFallbackValue(value === 'true')}
       />
     );
   }

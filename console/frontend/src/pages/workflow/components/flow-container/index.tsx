@@ -1,3 +1,5 @@
+import type { WorkflowSnapshot } from '@/components/workflow/types/domain';
+import { workflowSelection } from '@/components/workflow/modal/iterative-amplification/graph-state';
 import React, {
   useCallback,
   useState,
@@ -30,7 +32,7 @@ const nodeTypes = { custom: CustomNode };
 const edgeTypes = { customEdge: CustomEdge };
 
 const shouldIgnoreWorkflowShortcut = (event: KeyboardEvent): boolean => {
-  const target = event.target as HTMLElement | null;
+  const target = event.target instanceof HTMLElement ? event.target : null;
 
   if (!target) {
     return false;
@@ -58,7 +60,10 @@ interface IndexProps {
 const useFlowContainerEffect = ({
   lastSelection,
   startWorkflowKeydownEvent,
-}) => {
+}: {
+  lastSelection: WorkflowSnapshot | null;
+  startWorkflowKeydownEvent: boolean;
+}): void => {
   const undo = useFlowStore(state => state.undo);
   const paste = useFlowStore(state => state.paste);
   const takeSnapshot = useFlowStore(state => state.takeSnapshot);
@@ -85,8 +90,9 @@ const useFlowContainerEffect = ({
   }, [nodes, reactFlowInstance]);
 
   const handleDelete = useCallback(() => {
+    if (!lastSelection) return;
     takeSnapshot();
-    lastSelection.nodes = lastSelection?.nodes?.filter(
+    const deletableNodes = lastSelection.nodes.filter(
       node => node.nodeType !== 'node-start' && node.nodeType !== 'node-end'
     );
     const edgeIds = lastSelection?.edges?.map(edge => edge?.id);
@@ -100,13 +106,13 @@ const useFlowContainerEffect = ({
         removeNodeRef(edge.source, edge.target);
       }
     });
-    lastSelection?.nodes?.map(node => deleteNode(node?.id));
+    deletableNodes.forEach(node => deleteNode(node.id));
     setEdges(edges => edges.filter(edge => !edgeIds?.includes(edge?.id)));
     canPublishSetNot();
   }, [lastSelection, edges]);
 
   useEffect(() => {
-    const handleKeyDown = async event => {
+    const handleKeyDown = async (event: KeyboardEvent): Promise<void> => {
       if (shouldIgnoreWorkflowShortcut(event)) {
         return;
       }
@@ -144,7 +150,7 @@ const useFlowContainerEffect = ({
       }
     };
 
-    const handleMouseMove = event => {
+    const handleMouseMove = (event: MouseEvent): void => {
       position.current = { x: event.clientX, y: event.clientY };
     };
 
@@ -164,8 +170,9 @@ function Index({ zoom, setZoom }: IndexProps): React.ReactElement {
   // hooks
   const { handleAddNode, startWorkflowKeydownEvent } = useFlowCommon();
   const dropZoneRef = useRef<HTMLDivElement | null>(null);
-  const [lastSelection, setLastSelection] =
-    useState<OnSelectionChangeParams | null>(null);
+  const [lastSelection, setLastSelection] = useState<WorkflowSnapshot | null>(
+    null
+  );
   const nodes = useFlowStore(state => state.nodes);
   const edges = useFlowStore(state => state.edges);
   const reactFlowInstance = useFlowStore(state => state.reactFlowInstance);
@@ -242,7 +249,7 @@ function Index({ zoom, setZoom }: IndexProps): React.ReactElement {
   // =========================
   const onSelectionChange = useCallback(
     (flow: OnSelectionChangeParams): void => {
-      setLastSelection(flow);
+      setLastSelection(workflowSelection(flow, useFlowStore.getState()));
     },
     []
   );
@@ -299,7 +306,7 @@ function Index({ zoom, setZoom }: IndexProps): React.ReactElement {
         onSelectionChange={onSelectionChange}
         onEdgeUpdate={onEdgeUpdate}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes as unknown}
+        edgeTypes={edgeTypes}
         panOnDrag={controlMode === 'mouse'}
         selectionOnDrag={controlMode === 'touch'}
         nodesDraggable={canUseCanvases}

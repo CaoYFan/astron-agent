@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Button, Upload, Slider, Input, message, Spin } from 'antd';
+import type { UploadProps } from 'antd';
+import type { RcFile } from 'antd/es/upload/interface';
+import type { AvatarType } from '@/types/resource';
 import { avatarImageGenerate } from '@/services/common';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
 
@@ -12,7 +15,41 @@ import close from '@/assets/imgs/workflow/modal-close.png';
 
 const { Dragger } = Upload;
 
-function Image(props): React.ReactElement {
+type IconItem = AvatarType & { code?: string };
+interface ImageInfo {
+  downloadLink: string;
+  s3Key: string;
+}
+interface ImageUploadResponse {
+  code: number;
+  data?: ImageInfo;
+  message?: string;
+}
+type ImageUploadProps = UploadProps<ImageUploadResponse>;
+interface EditIconModalProps {
+  icons: IconItem[];
+  colors: AvatarType[];
+  botIcon: string | IconItem;
+  setBotIcon: (imageUrl: string) => void;
+  botColor: string;
+  setShowModal: (show: boolean) => void;
+}
+
+function isImageInfo(value: unknown): value is ImageInfo {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'downloadLink' in value &&
+    typeof value.downloadLink === 'string' &&
+    's3Key' in value &&
+    typeof value.s3Key === 'string'
+  );
+}
+
+function Image(props: {
+  imageUrl: string;
+  uploadProps: ImageUploadProps;
+}): React.ReactElement {
   const { imageUrl, uploadProps } = props;
 
   const [scale, setScale] = useState(1);
@@ -91,6 +128,13 @@ const TabHeader = ({
   hoverTab,
   setHoverTab,
   setActiveTab,
+}: {
+  setShowModal: (show: boolean) => void;
+  avatarFilterGenerationMethods: typeof avatarGenerationMethods;
+  activeTab: string;
+  hoverTab: string;
+  setHoverTab: (tab: string) => void;
+  setActiveTab: (tab: string) => void;
 }): React.ReactElement => {
   return (
     <>
@@ -137,6 +181,14 @@ const AvatarGallery = ({
   setPreviewIcon,
   setPreviewColor,
   colors,
+}: {
+  activeTab: string;
+  icons: IconItem[];
+  previewIcon: IconItem;
+  previewColor: string;
+  setPreviewIcon: (icon: IconItem) => void;
+  setPreviewColor: (color: string) => void;
+  colors: AvatarType[];
 }): React.ReactElement | null => {
   if (activeTab !== 'gallery') return null;
   return (
@@ -156,7 +208,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={`${item.name ?? ''}${item.value ?? ''}`}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -174,7 +230,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={`${item.name ?? ''}${item.value ?? ''}`}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -192,7 +252,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={`${item.name ?? ''}${item.value ?? ''}`}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -210,7 +274,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={`${item.name ?? ''}${item.value ?? ''}`}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -223,7 +291,7 @@ const AvatarGallery = ({
           <div
             key={index}
             className={`w-[40px] h-[40px] flex justify-center items-center ${item.name === previewColor ? 'color-item-active' : ''} cursor-pointer`}
-            onClick={() => setPreviewColor(item.name)}
+            onClick={() => setPreviewColor(item.name ?? '')}
           >
             <span
               className="w-[30px] h-[30px] rounded-lg"
@@ -240,6 +308,10 @@ const AvatarUpload = ({
   activeTab,
   uploadImageObject,
   uploadProps,
+}: {
+  activeTab: string;
+  uploadImageObject: ImageInfo;
+  uploadProps: ImageUploadProps;
 }): React.ReactElement | null => {
   if (activeTab !== 'upload') return null;
   return (
@@ -273,6 +345,13 @@ const AvatarAIChat = ({
   setGenerateImageDescription,
   generateImage,
   generateImageDescription,
+}: {
+  activeTab: string;
+  generateImageObject: ImageInfo;
+  loading: boolean;
+  setGenerateImageDescription: (description: string) => void;
+  generateImage: () => void;
+  generateImageDescription: string;
 }): React.ReactElement | null => {
   if (activeTab !== 'chat') return null;
   return (
@@ -318,21 +397,13 @@ const AvatarAIChat = ({
   );
 };
 
-function EditIconModal(props): React.ReactElement {
-  const {
-    icons,
-    colors,
-    botIcon,
-    setBotIcon,
-    botColor,
-    setBotColor,
-    setShowModal,
-  } = props;
+function EditIconModal(props: EditIconModalProps): React.ReactElement {
+  const { icons, colors, botIcon, setBotIcon, botColor, setShowModal } = props;
 
-  const [previewIcon, setPreviewIcon] = useState<unknown>({});
+  const [previewIcon, setPreviewIcon] = useState<IconItem>({});
   const [previewColor, setPreviewColor] = useState('');
-  const [activeTab, setActiveTab] = useState<string | undefined>('upload');
-  const [hoverTab, setHoverTab] = useState<string | undefined>('');
+  const [activeTab, setActiveTab] = useState('upload');
+  const [hoverTab, setHoverTab] = useState('');
   const [uploadImageObject, setUploadImageObject] = useState({
     downloadLink: '',
     s3Key: '',
@@ -346,11 +417,13 @@ function EditIconModal(props): React.ReactElement {
 
   useEffect(() => {
     if (botColor) {
-      setPreviewIcon({ ...botIcon });
+      setPreviewIcon(
+        typeof botIcon === 'string' ? { value: botIcon } : { ...botIcon }
+      );
       setPreviewColor(botColor);
     } else {
-      setPreviewIcon(icons[0]);
-      setPreviewColor(colors[0].name);
+      setPreviewIcon(icons[0] ?? {});
+      setPreviewColor(colors[0]?.name ?? '');
     }
   }, []);
 
@@ -363,7 +436,11 @@ function EditIconModal(props): React.ReactElement {
     setLoading(true);
     avatarImageGenerate(generateImageDescription)
       .then(data => {
-        setGenerateImageObject(data);
+        if (isImageInfo(data)) {
+          setGenerateImageObject(data);
+        } else {
+          message.error('图片生成失败，请重试');
+        }
       })
       .finally(() => setLoading(false));
   }
@@ -377,7 +454,7 @@ function EditIconModal(props): React.ReactElement {
     setShowModal(false);
   }
 
-  function beforeUpload(file): boolean {
+  function beforeUpload(file: RcFile): boolean {
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       message.error('上传文件大小不能超出2M！');
@@ -391,7 +468,7 @@ function EditIconModal(props): React.ReactElement {
       'webp',
       'bmp',
       'tiff',
-    ].includes(file.type.split('/').pop());
+    ].includes(file.type.split('/').pop() ?? '');
     if (!isJpgOrPng) {
       message.error('请上传JPG和PNG等格式的图片文件');
       return false;
@@ -400,7 +477,7 @@ function EditIconModal(props): React.ReactElement {
     }
   }
 
-  const uploadProps = {
+  const uploadProps: ImageUploadProps = {
     name: 'file',
     action: getFixedUrl('/image/upload'),
     headers: {
@@ -419,7 +496,7 @@ function EditIconModal(props): React.ReactElement {
           const data = info.file.response.data;
           setUploadImageObject(data);
         } else {
-          message.error(info.file.response.message);
+          message.error(info.file.response?.message ?? '图片上传失败，请重试');
         }
       }
     },

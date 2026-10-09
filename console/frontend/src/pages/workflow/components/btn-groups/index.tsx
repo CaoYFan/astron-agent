@@ -1,3 +1,4 @@
+import { workflowBotId, workflowBotNumber } from '../../workflow-metadata';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Tooltip, Button, message } from 'antd';
 import { useMemoizedFn } from 'ahooks';
@@ -32,22 +33,11 @@ interface PublishHeaderProps {
 }
 
 // 节点类型定义
-interface NodeType {
-  id: string;
-  type: string;
-  data?: {
-    outputs?: unknown[];
-  };
-}
-
-// 流程类型定义
-interface FlowType {
-  id?: string;
-  flowId?: string;
-  name?: string;
-  status?: number;
-  ext?: string;
-  type?: number;
+interface PublishHandlers {
+  setBotMultiFileParam: React.Dispatch<React.SetStateAction<boolean>>;
+  setOpenWxmol: React.Dispatch<React.SetStateAction<boolean>>;
+  setFabuFlag: React.Dispatch<React.SetStateAction<boolean>>;
+  setPublishModal: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const usePublishHeader = ({
@@ -55,7 +45,7 @@ const usePublishHeader = ({
   setOpenWxmol,
   setFabuFlag,
   setPublishModal,
-}) => {
+}: PublishHandlers) => {
   const location = useLocation();
   // Flow store
   const currentFlow = useFlowsManager(state => state.currentFlow);
@@ -94,34 +84,32 @@ const usePublishHeader = ({
     []
   );
   const handleVersionSettings = useMemoizedFn(() => {
-    setVersionManagement((prev: boolean) => !prev);
+    setVersionManagement(!useFlowsManager.getState().versionManagement);
     setAdvancedConfiguration(false);
     setOpenOperationResult(false);
   });
 
   const showComparativeDebugging = useMemo(() => {
-    const startNode = nodes?.find(node => node.type === 'node-start');
+    const startNode = nodes.find(node => node.nodeType === 'node-start');
     const outputs = startNode?.data?.outputs;
     let multiParams = true;
     if (
       outputs?.length === 1 ||
-      outputs
-        ?.slice(1)
-        .every((item: { fileType: string }) => item.fileType === 'file')
+      outputs?.slice(1).every(item => item.fileType === 'file')
     ) {
       multiParams = false;
     }
     return (
       !historyVersion &&
       canPublish &&
-      nodes?.some(node => node.type === 'spark-llm') &&
+      nodes.some(node => node.nodeType === 'spark-llm') &&
       !multiParams
     );
   }, [historyVersion, nodes, canPublish]);
 
   const handleAdvancedSettings = useMemoizedFn(() => {
     setVersionManagement(false);
-    setAdvancedConfiguration((prev: boolean) => !prev);
+    setAdvancedConfiguration(!useFlowsManager.getState().advancedConfiguration);
     setNodeInfoEditDrawerlInfo({
       open: false,
       nodeId: '',
@@ -135,9 +123,7 @@ const usePublishHeader = ({
     let multiParams = true;
     if (
       outputs?.length === 1 ||
-      outputs
-        ?.slice(1)
-        .every((item: { fileType: string }) => item.fileType === 'file')
+      outputs?.slice(1).every(item => item.fileType === 'file')
     ) {
       multiParams = false;
     }
@@ -155,7 +141,7 @@ const usePublishHeader = ({
       );
       return;
     }
-    if (!currentFlow?.flowId) return;
+    if (!currentFlow?.flowId || currentFlow.id === undefined) return;
 
     const request = publishPreflightGuardRef.current.start(workflowIdentity);
     if (!request) return;
@@ -188,16 +174,22 @@ const usePublishHeader = ({
     }
   });
   const newBotId = useMemo(() => {
-    return currentFlow?.ext ? JSON.parse(currentFlow.ext)?.botId : null;
+    return workflowBotId(currentFlow?.ext);
   }, [currentFlow]);
 
   const getBotBaseInfo = (newBotId?: string | number): void => {
     const botId = newBotId;
-    getAgentDetail(botId as unknown as number)
+    if (botId === undefined) return;
+    getAgentDetail(botId)
       .then(data => {
+        if (typeof data !== 'object' || data === null || Array.isArray(data))
+          return;
         setBotDetailInfo({
           ...data,
-          name: data?.botName,
+          name:
+            'botName' in data && typeof data.botName === 'string'
+              ? data.botName
+              : undefined,
         });
       })
       .catch(err => {
@@ -224,25 +216,21 @@ const PublishHeader: React.FC<PublishHeaderProps> = ({
   const navigate = useNavigate();
   const { id: agentMaasId } = useParams<{ id: string }>();
   // Flow store
-  const currentFlow: FlowType = useFlowsManager(
-    (state: unknown) => state.currentFlow
-  );
+  const currentFlow = useFlowsManager(state => state.currentFlow);
   const setOpenOperationResult = useFlowsManager(
-    (state: unknown) => state.setOpenOperationResult
+    state => state.setOpenOperationResult
   );
   const setWorkflowTracePanelOpen = useFlowsManager(
-    (state: unknown) => state.setWorkflowTracePanelOpen
+    state => state.setWorkflowTracePanelOpen
   );
   const historyVersion: boolean = useFlowsManager(
-    (state: unknown) => state.historyVersion
+    state => state.historyVersion
   );
-  const checkFlow = useFlowsManager((state: unknown) => state.checkFlow);
-  const isLoading: boolean = useFlowsManager(
-    (state: unknown) => state.isLoading
-  );
+  const checkFlow = useFlowsManager(state => state.checkFlow);
+  const isLoading: boolean = useFlowsManager(state => state.isLoading);
   const [botMultiFileParam, setBotMultiFileParam] = useState<boolean>(false);
   const [editV2Visible, { setLeft: hide, setRight: show }] = useToggle();
-  const [fabuFlag, setFabuFlag]: any = useState(false);
+  const [fabuFlag, setFabuFlag] = useState(false);
   const [openWxmol, setOpenWxmol] = useState(false);
   const {
     handlePublish,
@@ -277,9 +265,7 @@ const PublishHeader: React.FC<PublishHeaderProps> = ({
         onCancel={() => {
           setOpenWxmol(false);
         }}
-        workflowId={
-          currentFlow?.ext ? JSON.parse(currentFlow.ext)?.botId : null
-        }
+        workflowId={workflowBotNumber(currentFlow?.ext)}
         agentMaasId={agentMaasId || null}
         isVirtual={currentFlow?.type === 4}
       />

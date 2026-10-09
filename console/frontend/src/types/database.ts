@@ -142,7 +142,7 @@ export interface DeleteTableParams {
 
 // 获取表字段参数
 export interface FieldListParams {
-  tbId: number;
+  tbId: string | number;
   pageNum: number;
   pageSize: number;
 }

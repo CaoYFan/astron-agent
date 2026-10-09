@@ -1,3 +1,4 @@
+import type { NodeChildrenProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, memo } from 'react';
 import { cloneDeep } from 'lodash';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +7,16 @@ import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 
-function index({ id, data, children }): React.ReactElement {
+interface OutputParamsProps extends NodeChildrenProps {
+  hasRef?: boolean;
+  hasDescription?: boolean;
+  allowAdd?: boolean;
+  allowRemove?: boolean;
+  disabled?: boolean;
+  typeStringOnly?: boolean;
+}
+
+function index({ id, data, children }: OutputParamsProps): React.ReactElement {
   const {
     handleAddOutputLine,
     addUniqueComponentToProperties,

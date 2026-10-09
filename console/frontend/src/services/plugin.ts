@@ -1,3 +1,6 @@
+import type { ToolImportData } from '@/types/tool-import';
+export type { ToolImportData } from '@/types/tool-import';
+import type { McpServerTool } from '@/types/workflow-api';
 import http from '@/utils/http';
 import { PageData, ToolItem } from '@/types/resource';
 import { DebugToolParams, MCPToolDetail } from '@/types/plugin-store';
@@ -81,8 +84,10 @@ export async function listToolSquare(params: {
   return await http.post('/tool/list-tool-square', params);
 }
 
-export async function getMcpServerList(): Promise<unknown> {
-  return await http.get('/workflow/get-mcp-server-list-locally');
+export async function getMcpServerList(): Promise<McpServerTool[]> {
+  return await http.get<McpServerTool[], McpServerTool[]>(
+    '/workflow/get-mcp-server-list-locally'
+  );
 }
 
 export async function getServerToolDetailAPI(
@@ -104,21 +109,20 @@ export async function debugServerToolAPI(params: {
 }
 
 //获取插件版本列表
-export async function getToolVersionList(toolId: string): Promise<
-  {
-    id: string;
-    version?: string;
-    createTime?: string;
-  }[]
-> {
-  return await http.get(`/tool/get-tool-version?toolId=${toolId}`);
+export async function getToolVersionList(toolId: string): Promise<ToolItem[]> {
+  return await http.get<ToolItem[], ToolItem[]>(
+    `/tool/get-tool-version?toolId=${toolId}`
+  );
 }
 
 //获取插件最新版本信息
 export async function getToolLatestVersion(
   toolIds: string[]
-): Promise<unknown> {
-  return await http.get(`/tool/get-tool-latest-version?toolIds=${toolIds}`);
+): Promise<Record<string, string>> {
+  return await http.get<Record<string, string>, Record<string, string>>(
+    '/tool/get-tool-latestVersion',
+    { params: { toolIds: toolIds.join(',') } }
+  );
 }
 
 export async function toolFeedback(params: {
@@ -156,10 +160,16 @@ export async function exportPlugin(params: {
 }
 
 // 导入数据
-export async function importPlugin(params: { file: File }): Promise<unknown> {
-  return await http.post(`/tool/import`, params, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+export async function importPlugin(params: {
+  file: File;
+}): Promise<ToolImportData> {
+  return await http.post<ToolImportData, ToolImportData>(
+    `/tool/import`,
+    params,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }
+  );
 }
 
 //mcp列表

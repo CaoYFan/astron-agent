@@ -3,9 +3,9 @@ import React from 'react';
 // 类型定义
 export interface KnowledgeDetailProps {
   setCurrentTab: (tab: string) => void;
-  parentId: number;
-  setParentId: (id: number) => void;
-  setFileId: (id: number) => void;
+  parentId: number | string;
+  setParentId: (id: number | string) => void;
+  setFileId: (id: number | string) => void;
 }
 
 export interface EditChunkProps {
@@ -17,39 +17,13 @@ export interface EditChunkProps {
 
 export interface FileDetailProps {
   setCurrentTab: (tab: string) => void;
-  fileId: number;
-  setFileId: (id: number) => void;
+  fileId: number | string;
+  setFileId: (id: number | string) => void;
 }
 
-export interface KnowledgeFileItem {
-  id: number;
-  name: string;
-  type: string;
-  isFile: boolean;
-  fileId?: number;
-  fileInfoV2?: {
-    charCount: number;
-    enabled: boolean;
-    size: number;
-  };
-  hitCount: number;
-  createTime: string;
-  auditSuggest?: string;
-}
+export type KnowledgeFileItem = import('@/types/resource').FileItem;
 
-export interface ChunkItem {
-  id: number;
-  content: string;
-  markdownContent: string;
-  enabled: boolean;
-  charCount: number;
-  testHitCount: number;
-  index: number;
-  tagDtoList: TagItem[];
-  auditSuggest?: string;
-  auditDetail?: string;
-  source?: number;
-}
+export type ChunkItem = import('@/types/resource').Chunk;
 
 export interface TagItem {
   type: number;
@@ -61,10 +35,8 @@ export interface FileInfo {
   type: string;
 }
 
-export interface DirectoryItem {
-  name: string;
-  parentId: number;
-}
+export type DirectoryItem =
+  import('@/types/resource').FileDirectoryTreeResponse;
 
 export interface PaginationState {
   current: number;

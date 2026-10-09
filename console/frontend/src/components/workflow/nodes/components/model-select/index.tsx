@@ -1,3 +1,20 @@
+import type { TFunction } from 'i18next';
+import type {
+  WorkflowModel,
+  WorkflowNodeData,
+  WorkflowNodeParameters,
+} from '@/components/workflow/types/domain';
+import {
+  readModelSettings,
+  writeModelSetting,
+} from '@/components/workflow/nodes/model-settings';
+interface ModelDisplayProps {
+  model: WorkflowModel;
+  nodeParam: WorkflowNodeParameters;
+  t: TFunction;
+}
+
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useState, useMemo, memo } from 'react';
 import { useMemoizedFn } from 'ahooks';
 import { cloneDeep } from 'lodash';
@@ -24,7 +41,11 @@ import debuggerIcon from '@/assets/imgs/workflow/debugger-icon.png';
 import inputErrorMsg from '@/assets/imgs/plugin/input_error_msg.svg';
 
 // 模型标签
-const ModelTags = ({ tags = [] }): React.ReactElement => {
+const ModelTags = ({
+  tags = [],
+}: {
+  tags?: string[];
+}): React.ReactElement | null => {
   if (!tags?.length) return null;
   return (
     <div className="text-sm flex items-center gap-2">
@@ -64,7 +85,11 @@ const ModelTags = ({ tags = [] }): React.ReactElement => {
 };
 
 // ========== 提取逻辑函数 ==========
-const getTooltipTitle = (model, nodeParam, t): string => {
+const getTooltipTitle = (
+  model: WorkflowModel,
+  nodeParam: WorkflowNodeParameters,
+  t: TFunction
+): string => {
   if (nodeParam?.modelEnabled === false && model?.llmId === nodeParam?.llmId) {
     return t('workflow.nodes.modelSelect.modelOffShelf');
   }
@@ -76,7 +101,11 @@ const getTooltipTitle = (model, nodeParam, t): string => {
   return '';
 };
 
-const ModelStatusBlock = ({ model, nodeParam, t }): React.ReactElement => {
+const ModelStatusBlock = ({
+  model,
+  nodeParam,
+  t,
+}: ModelDisplayProps): React.ReactElement | null => {
   const isOffShelf =
     model?.shelfStatus === 1 ||
     (nodeParam?.modelEnabled === false && model?.llmId === nodeParam?.llmId);
@@ -96,7 +125,11 @@ const ModelStatusBlock = ({ model, nodeParam, t }): React.ReactElement => {
 };
 
 // ========== 主渲染 ==========
-const ModelItem = ({ model, nodeParam, t }): React.ReactElement => (
+const ModelItem = ({
+  model,
+  nodeParam,
+  t,
+}: ModelDisplayProps): React.ReactElement => (
   <Tooltip
     title={getTooltipTitle(model, nodeParam, t)}
     overlayClassName="black-tooltip"
@@ -125,10 +158,7 @@ const ModelItem = ({ model, nodeParam, t }): React.ReactElement => (
   </Tooltip>
 );
 
-const useModelSelect = (
-  id,
-  models
-): { handleModelChange: (data: unknown, value: unknown) => void } => {
+const useModelSelect = (id: string, models: WorkflowModel[]) => {
   const { currentNode } = useNodeCommon({
     id,
   });
@@ -140,119 +170,121 @@ const useModelSelect = (
   );
   const updateNodeRef = currentStore(state => state.updateNodeRef);
   const setNode = currentStore(state => state.setNode);
-  const handleResetModelParams = useMemoizedFn(currentSelectModel => {
-    if (currentSelectModel?.llmSource === 0) {
-      getCustomModelConfigDetail(
-        currentSelectModel.id,
-        currentSelectModel.llmSource
-      ).then(data => {
-        setNode(id, old => {
-          const config = data?.filter(
-            (item: unknown) =>
-              item.constraintType === 'range' ||
-              item.constraintType === 'switch'
-          );
-          const extraParams = {};
-          config.forEach(item => {
-            extraParams[item?.key] = item?.default;
-            Reflect.deleteProperty(old.data.nodeParam, item.key);
+  const handleResetModelParams = useMemoizedFn(
+    (currentSelectModel: WorkflowModel) => {
+      if (currentSelectModel?.llmSource === 0) {
+        getCustomModelConfigDetail(
+          String(currentSelectModel.id),
+          String(currentSelectModel.llmSource)
+        ).then(data => {
+          setNode(id, old => {
+            const config = readModelSettings({
+              ...currentSelectModel,
+              config: JSON.stringify(data ?? []),
+              llmSource: 0,
+            });
+            const extraParams: Record<string, number | boolean | null> = {};
+            config.forEach(item => {
+              extraParams[item?.key] = item?.default;
+              Reflect.deleteProperty(old.data.nodeParam, item.key);
+            });
+            old.data.nodeParam.extraParams = extraParams;
+            return {
+              ...cloneDeep(old),
+            };
           });
-          old.data.nodeParam.extraParams = extraParams;
-          return {
-            ...cloneDeep(old),
-          };
+          autoSaveCurrentFlow();
         });
-        autoSaveCurrentFlow();
-      });
-    } else {
-      getModelConfigDetail(
-        currentSelectModel.llmId,
-        currentSelectModel.llmSource
-      ).then(modelDetail => {
-        const configs = (
-          modelDetail?.config?.serviceBlock?.[currentSelectModel.serviceId]?.[0]
-            ?.fields ||
-          modelDetail?.config?.serviceBlock?.['@@serviceId@@']?.[0]?.fields ||
-          []
-        )?.filter(
-          (item: unknown) =>
-            item.constraintType === 'range' || item.constraintType === 'switch'
+      } else {
+        getModelConfigDetail(
+          String(currentSelectModel.llmId),
+          String(currentSelectModel.llmSource)
+        ).then(modelDetail => {
+          const configs = readModelSettings({
+            ...currentSelectModel,
+            config: JSON.stringify(modelDetail),
+            llmSource: 2,
+          });
+          setNode(id, old => {
+            configs.forEach(item => {
+              if (item.key === 'max_tokens') {
+                item.key = 'maxTokens';
+              }
+              if (item.key === 'top_k') {
+                item.key = 'topK';
+              }
+              if (item.key === 'search_disable') {
+                item.key = 'searchDisable';
+              }
+              writeModelSetting(old.data.nodeParam, item.key, item.default);
+            });
+            return {
+              ...cloneDeep(old),
+            };
+          });
+          autoSaveCurrentFlow();
+        });
+      }
+    }
+  );
+  const handleSparkLLMOutputs = useMemoizedFn(
+    (data: WorkflowNodeData, value: WorkflowModel) => {
+      if (
+        (data.nodeParam.serviceId === 'xdeepseekr1' ||
+          data?.nodeParam?.isThink) &&
+        !value?.isThink
+      ) {
+        data.outputs = data?.outputs?.filter(
+          item => item.customParameterType !== 'deepseekr1'
         );
-        setNode(id, old => {
-          configs.forEach(item => {
-            if (item.key === 'max_tokens') {
-              item.key = 'maxTokens';
-            }
-            if (item.key === 'top_k') {
-              item.key = 'topK';
-            }
-            if (item.key === 'search_disable') {
-              item.key = 'searchDisable';
-            }
-            old.data.nodeParam[item.key] = item.default;
-          });
-          return {
-            ...cloneDeep(old),
-          };
-        });
-        autoSaveCurrentFlow();
-      });
-    }
-  });
-  const handleSparkLLMOutputs = useMemoizedFn((data, value) => {
-    if (
-      (data.nodeParam.serviceId === 'xdeepseekr1' ||
-        data?.nodeParam?.isThink) &&
-      !value?.isThink
-    ) {
-      data.outputs = data?.outputs?.filter(
-        (item: unknown) => item.customParameterType !== 'deepseekr1'
-      );
-    }
+      }
 
-    if (
-      !data?.nodeParam?.isThink &&
-      (value.serviceId === 'xdeepseekr1' || value?.isThink)
-    ) {
-      data.outputs = [
-        {
-          id: uuid(),
-          customParameterType: 'deepseekr1',
-          name: 'REASONING_CONTENT',
-          nameErrMsg: '',
-          required: false,
-          schema: {
-            default: t('workflow.nodes.modelSelect.modelThinkingProcess'),
-            type: 'string',
+      if (
+        !data?.nodeParam?.isThink &&
+        (value.serviceId === 'xdeepseekr1' || value?.isThink)
+      ) {
+        data.outputs = [
+          {
+            id: uuid(),
+            customParameterType: 'deepseekr1',
+            name: 'REASONING_CONTENT',
+            nameErrMsg: '',
+            required: false,
+            schema: {
+              default: t('workflow.nodes.modelSelect.modelThinkingProcess'),
+              type: 'string',
+            },
           },
-        },
-        ...data.outputs,
-      ];
+          ...data.outputs,
+        ];
+      }
     }
-  });
+  );
 
-  const handleSparkLLMInputs = useMemoizedFn((data, value) => {
-    if (value.serviceId === 'image_understanding' || value?.multiMode) {
-      data.inputs.unshift({
-        id: uuid(),
-        customParameterType: 'image_understanding',
-        name: 'SYSTEM_IMAGE',
-        schema: {
-          type: 'string',
-          value: { content: {}, type: 'ref' },
-        },
-      });
+  const handleSparkLLMInputs = useMemoizedFn(
+    (data: WorkflowNodeData, value: WorkflowModel) => {
+      if (value.serviceId === 'image_understanding' || value?.multiMode) {
+        data.inputs.unshift({
+          id: uuid(),
+          customParameterType: 'image_understanding',
+          name: 'SYSTEM_IMAGE',
+          schema: {
+            type: 'string',
+            value: { content: {}, type: 'ref' },
+          },
+        });
+      }
+      if (
+        data.nodeParam.serviceId === 'image_understanding' ||
+        data?.nodeParam?.multiMode
+      ) {
+        data.inputs.shift();
+      }
     }
-    if (
-      data.nodeParam.serviceId === 'image_understanding' ||
-      data?.nodeParam?.multiMode
-    ) {
-      data.inputs.shift();
-    }
-  });
+  );
 
-  const handleRetryConfig = useMemoizedFn(data => {
-    if (data?.retryConfig?.errorStrategy !== 1) return;
+  const handleRetryConfig = useMemoizedFn((data: WorkflowNodeData) => {
+    if (data.retryConfig?.errorStrategy !== 1 || !currentNode) return;
 
     if (!checkedNodeOutputData(data?.outputs, currentNode)) {
       data.retryConfig.customOutput = JSON.stringify({ output: '' }, null, 2);
@@ -262,8 +294,8 @@ const useModelSelect = (
       data.retryConfig.customOutput = JSON.stringify(
         generateOrUpdateObject(
           data?.outputs,
-          isJSON(data?.retryConfig.customOutput)
-            ? JSON.parse(data?.retryConfig.customOutput)
+          isJSON(data.retryConfig.customOutput ?? '')
+            ? JSON.parse(data.retryConfig.customOutput ?? 'null')
             : null
         ),
         null,
@@ -273,58 +305,63 @@ const useModelSelect = (
     }
   });
 
-  const updateNodeParams = useMemoizedFn((data, value) => {
-    data.nodeParam.uid = user?.uid?.toString();
-    data.nodeParam.llmId = value.llmId;
-    data.nodeParam.domain = value.domain;
-    data.nodeParam.serviceId = value.serviceId;
-    data.nodeParam.patchId = value.patchId;
-    data.nodeParam.url = value.url;
-    data.nodeParam.modelId = value.id;
-    data.nodeParam.isThink = value.isThink;
-    data.nodeParam.multiMode = value.multiMode;
-    data.nodeParam.modelName = value.name;
-    data.nodeParam.modelEnabled = true;
-    data.nodeParam.llmIdErrMsg = '';
+  const updateNodeParams = useMemoizedFn(
+    (data: WorkflowNodeData, value: WorkflowModel) => {
+      data.nodeParam.uid = user?.uid?.toString();
+      data.nodeParam.llmId = value.llmId;
+      data.nodeParam.domain = value.domain;
+      data.nodeParam.serviceId = value.serviceId;
+      data.nodeParam.patchId = value.patchId;
+      data.nodeParam.url = value.url;
+      data.nodeParam.modelId = value.id;
+      data.nodeParam.isThink = value.isThink;
+      data.nodeParam.multiMode = value.multiMode;
+      data.nodeParam.modelName = value.name;
+      data.nodeParam.modelEnabled = true;
+      data.nodeParam.llmIdErrMsg = '';
 
-    if (value.provider) {
-      data.nodeParam.source = value.provider;
-    } else if (value.llmSource === 0) {
-      data.nodeParam.source = 'openai';
-    } else {
-      Reflect.deleteProperty(data.nodeParam, 'source');
-      Reflect.deleteProperty(data.nodeParam, 'extraParams');
+      if (value.provider) {
+        data.nodeParam.source = value.provider;
+      } else if (value.llmSource === 0) {
+        data.nodeParam.source = 'openai';
+      } else {
+        Reflect.deleteProperty(data.nodeParam, 'source');
+        Reflect.deleteProperty(data.nodeParam, 'extraParams');
+      }
     }
-  });
+  );
 
-  const handleModelChange = useMemoizedFn((data, value) => {
-    const currentModel = models.find(model => model.llmId === value);
-    if (id?.startsWith('spark-llm')) {
-      handleSparkLLMOutputs(data, currentModel);
-      handleSparkLLMInputs(data, currentModel);
-      handleRetryConfig(data);
+  const handleModelChange = useMemoizedFn(
+    (data: WorkflowNodeData, value: number | string) => {
+      const currentModel = models.find(model => model.llmId === value);
+      if (!currentModel) return;
+      if (id?.startsWith('spark-llm')) {
+        handleSparkLLMOutputs(data, currentModel);
+        handleSparkLLMInputs(data, currentModel);
+        handleRetryConfig(data);
+      }
+      if (data.nodeParam.isThink !== currentModel.isThink) {
+        updateNodeRef(id);
+      }
+      updateNodeParams(data, currentModel);
+      setNode(id, old => {
+        return {
+          ...cloneDeep({
+            ...old,
+            data,
+          }),
+        };
+      });
+      handleResetModelParams(currentModel);
     }
-    if (data.nodeParam.isThink !== currentModel.isThink) {
-      updateNodeRef(id);
-    }
-    updateNodeParams(data, currentModel);
-    setNode(id, old => {
-      return {
-        ...cloneDeep({
-          ...old,
-          data,
-        }),
-      };
-    });
-    handleResetModelParams(currentModel);
-  });
+  );
 
   return {
     handleModelChange,
   };
 };
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { handleChangeNodeParam, nodeParam, models } = useNodeCommon({
     id,
     data,
@@ -344,7 +381,9 @@ function index({ id, data }): React.ReactElement {
         <div className="flex-1">
           <FlowSelect
             popupClassName="overscroll-contain flow-model-select-dropdown"
-            getPopupContainer={triggerNode => triggerNode.parentNode}
+            getPopupContainer={triggerNode =>
+              triggerNode.parentElement ?? document.body
+            }
             value={currentSelectModel ? nodeParam?.llmId : nodeParam?.modelName}
             onChange={value => handleModelChange(data, value)}
           >

@@ -19,7 +19,7 @@ import { VariableAggregationDetail } from '@/components/workflow/nodes/variable-
 import { FlowDetail } from '@/components/workflow/nodes/flow';
 import { AgentDetail } from '@/components/workflow/nodes/agent';
 import { QuestionAnswerDetail } from '@/components/workflow/nodes/question-answer';
-import { NodeCommonProps } from '@/components/workflow/types/hooks';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import { RpaDetail } from '@/components/workflow/nodes/rpa';
 import { McpDetail } from '@/components/workflow/nodes/mcp';
 
@@ -32,7 +32,7 @@ interface OriginOutputType {
 
 export const nodeTypeComponentMap: Record<
   string,
-  React.ComponentType<NodeCommonProps>
+  React.ComponentType<NodeComponentProps>
 > = {
   'node-start': StartDetail,
   'iteration-node-start': StartDetail,

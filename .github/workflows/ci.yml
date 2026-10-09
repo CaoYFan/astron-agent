@@ -35,6 +35,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Test coverage summary calculation
+        run: python3 -m unittest discover -s makefiles/tests -p 'test_*.py' -v
+
       - name: Detect active projects
         id: detect
         run: |
@@ -170,17 +173,10 @@ jobs:
               echo "📦 Installing dependencies..."
               npm ci --legacy-peer-deps
               echo "✨ Checking format compliance..."
-              UNFORMATTED=$(npx prettier --list-different "**/*.{ts,tsx,js,jsx,json,md}" 2>/dev/null || true) && \
-              if [ -n "$UNFORMATTED" ]; then \
-                echo "Files that need formatting:" && \
-                echo "$UNFORMATTED" && \
-                echo "Run 'npm run format' to fix formatting issues." && \
-                exit 1; \
-              fi && \
-              echo "🔍 Running TypeScript type checking..." && \
-              (npx tsc --noEmit --pretty || echo "⚠️ TypeScript type checking found errors, but continuing...") && \
-              echo "📋 Running ESLint (errors only)..." && \
-              npx eslint "**/*.{ts,tsx}" --quiet
+              npm run format:check
+              npm run type-check -- --pretty false
+              npm run lint
+              npm run build
               ;;
             go)
               echo "🔍 Running Go quality checks..."
@@ -366,28 +362,7 @@ jobs:
 
               if [ -n "$CSV_FILES" ]; then
                 # Aggregate coverage from all modules
-                awk -F',' '
-                  FNR==1 {next}  # Skip header of each file
-                  $2 != "" {
-                    branch_covered += $6;
-                    branch_missed += $5;
-                    line_covered += $8;
-                    line_missed += $7;
-                    method_covered += $12;
-                    method_missed += $11;
-                  }
-                  END {
-                    if ((line_covered + line_missed) > 0) {
-                      printf "Lines:    %.1f%% (%d/%d)\n", (line_covered/(line_covered+line_missed))*100, line_covered, line_covered+line_missed;
-                    }
-                    if ((branch_covered + branch_missed) > 0) {
-                      printf "Branches: %.1f%% (%d/%d)\n", (branch_covered/(branch_covered+branch_missed))*100, branch_covered, branch_covered+branch_missed;
-                    }
-                    if ((method_covered + method_missed) > 0) {
-                      printf "Methods:  %.1f%% (%d/%d)\n", (method_covered/(method_covered+method_missed))*100, method_covered, method_covered+method_missed;
-                    }
-                  }
-                ' $CSV_FILES
+                python3 "$GITHUB_WORKSPACE/makefiles/jacoco_summary.py" .
                 echo "================================================"
                 echo "📄 Module reports:"
                 find . -name "index.html" -path "*/site/jacoco/index.html" | while read report; do

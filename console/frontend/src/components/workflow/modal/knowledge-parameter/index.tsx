@@ -1,3 +1,4 @@
+import type { WorkflowNode } from '@/components/workflow/types/domain';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Slider, InputNumber, Button } from 'antd';
@@ -34,16 +35,19 @@ const KnowledgeParameter = (): React.ReactElement => {
     });
   }, [currentNode]);
 
-  const handleParameterChange = useMemoizedFn((fn: (old: unknown) => void) => {
-    autoSaveCurrentFlow();
-    setNode(currentNode?.id, old => {
-      fn(old);
-      return {
-        ...cloneDeep(old),
-      };
-    });
-    canPublishSetNot();
-  });
+  const handleParameterChange = useMemoizedFn(
+    (fn: (old: WorkflowNode) => void) => {
+      if (!currentNode) return;
+      autoSaveCurrentFlow();
+      setNode(currentNode.id, old => {
+        fn(old);
+        return {
+          ...cloneDeep(old),
+        };
+      });
+      canPublishSetNot();
+    }
+  );
 
   const handleOk = useMemoizedFn((): void => {
     handleParameterChange(old => {
@@ -89,7 +93,8 @@ const KnowledgeParameter = (): React.ReactElement => {
                   <InputNumber
                     className="global-input ml-[30px] pt-1.5 pl-3.5 w-[60px] text-center"
                     value={repoConfig.topN}
-                    onChange={(value: unknown) => {
+                    onChange={value => {
+                      if (value === null) return;
                       setRepoConfig({
                         ...repoConfig,
                         topN: typeof value === 'number' ? value : 3,
@@ -123,7 +128,8 @@ const KnowledgeParameter = (): React.ReactElement => {
                   <InputNumber
                     className="global-input ml-[30px] pt-1.5 pl-0.5 w-[60px] text-center"
                     value={repoConfig.score}
-                    onChange={(value: unknown) => {
+                    onChange={value => {
+                      if (value === null) return;
                       setRepoConfig({
                         ...repoConfig,
                         score: value,

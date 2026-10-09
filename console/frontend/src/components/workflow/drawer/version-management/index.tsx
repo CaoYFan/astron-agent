@@ -17,7 +17,6 @@ import {
   PublicResultItem,
   FeedbackItem,
   TabType,
-  ReactFlowNode,
   FlowType,
   UseVersionManagementProps,
 } from '@/components/workflow/types';
@@ -34,6 +33,34 @@ import dayjs from 'dayjs';
 import FeedbackDialog from '@/components/workflow/modal/feedback-dialog';
 import { getFeedbackList } from '@/services/common';
 import { useTranslation } from 'react-i18next';
+import type { WorkflowSnapshot } from '@/components/workflow/types/domain';
+
+interface VersionContext extends UseVersionManagementProps {
+  t: ReturnType<typeof useTranslation>['t'];
+  restoreVerName: string;
+  currentFlow: FlowType;
+  versionList: VersionItem[];
+  selectedCardId: string;
+  setSelectedCardId: React.Dispatch<React.SetStateAction<string>>;
+  selectedVersionData: VersionItem | null;
+  setSelectedVersionData: React.Dispatch<
+    React.SetStateAction<VersionItem | null>
+  >;
+  publicResultData: PublicResultItem[] | null;
+  setPublicResultData: React.Dispatch<
+    React.SetStateAction<PublicResultItem[] | null>
+  >;
+  isOverlayVisible: boolean;
+  setIsOverlayVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  feedbackItem: React.MutableRefObject<FeedbackItem>;
+  feedbackList: FeedbackItem[];
+  setFeedbackList: React.Dispatch<React.SetStateAction<FeedbackItem[]>>;
+  selectedQsId: string;
+  setSelectedQsId: React.Dispatch<React.SetStateAction<string>>;
+  setVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  setRestoreVerName: React.Dispatch<React.SetStateAction<string>>;
+  handleDebugger: ReturnType<typeof useFlowCommon>['handleDebugger'];
+}
 
 const TAB_TYPE: TabType = {
   version: '1',
@@ -46,7 +73,14 @@ const PublishResultModal = ({
   setIsOverlayVisible,
   selectedVersionData,
   publicResultData,
-}): React.ReactElement | null => {
+}: Pick<
+  VersionContext,
+  | 't'
+  | 'isOverlayVisible'
+  | 'setIsOverlayVisible'
+  | 'selectedVersionData'
+  | 'publicResultData'
+>): React.ReactElement | null => {
   if (!isOverlayVisible) return null;
   const renderPlatformLogo = (type: number): React.ReactElement | null => {
     switch (type) {
@@ -165,7 +199,18 @@ const VersionList = ({
   setSelectedVersionData,
   setIsOverlayVisible,
   handleDebugger,
-}): React.ReactElement | null => {
+}: Pick<
+  VersionContext,
+  | 'selectedCardId'
+  | 'currentFlow'
+  | 't'
+  | 'handleCardClick'
+  | 'restoreVerName'
+  | 'versionList'
+  | 'setSelectedVersionData'
+  | 'setIsOverlayVisible'
+  | 'handleDebugger'
+>): React.ReactElement | null => {
   return (
     <div className="flex flex-1 overflow-auto version-list">
       <Timeline mode="left">
@@ -189,7 +234,9 @@ const VersionList = ({
               borderColor:
                 selectedCardId === currentFlow?.flowId ? '#6356EA' : '#e8e8e8',
             }}
-            onClick={() => handleCardClick(currentFlow?.flowId)}
+            onClick={() =>
+              currentFlow.flowId && handleCardClick(currentFlow.flowId)
+            }
             hoverable
           >
             <div className="px-3 pb-[6px]">
@@ -273,7 +320,10 @@ const FeedbackList = ({
   selectedQsId,
   setSelectedQsId,
   handleViewDetail,
-}): React.ReactElement | null => {
+}: Pick<
+  VersionContext,
+  't' | 'feedbackList' | 'selectedQsId' | 'setSelectedQsId' | 'handleViewDetail'
+>): React.ReactElement | null => {
   return (
     <>
       {!feedbackList.length ? (
@@ -345,7 +395,20 @@ const useVersionManagement = ({
   setRestoreVerName,
   selectedVersionData,
   setPublicResultData,
-}): UseVersionManagementProps => {
+}: Pick<
+  VersionContext,
+  | 'currentFlow'
+  | 'setSelectedCardId'
+  | 'feedbackItem'
+  | 'setVisible'
+  | 'setFeedbackList'
+  | 'setSelectedQsId'
+  | 'selectedCardId'
+  | 'versionList'
+  | 'setRestoreVerName'
+  | 'selectedVersionData'
+  | 'setPublicResultData'
+>): UseVersionManagementProps => {
   const setEdgeType = useFlowsManager(state => state.setEdgeType);
   const setNodes = useFlowStore(state => state.setNodes);
   const setEdges = useFlowStore(state => state.setEdges);
@@ -360,12 +423,12 @@ const useVersionManagement = ({
   const initFlowData = useFlowsManager(state => state.initFlowData);
 
   const handleSetNodesAndEdges = useMemoizedFn((originData: string): void => {
-    const data = JSON.parse(originData);
+    const data: WorkflowSnapshot = JSON.parse(originData);
     setNodes(
-      data.nodes?.map((node: unknown) => ({
+      data.nodes.map(node => ({
         ...node,
         type: 'custom',
-        nodeType: node?.id?.split('::')?.[0],
+        nodeType: node.id.split('::')[0] ?? node.nodeType,
         selected: false,
         data: {
           ...node.data,
@@ -424,6 +487,7 @@ const useVersionManagement = ({
   };
 
   const handlegetRestoreVersion = (): void => {
+    if (!currentFlow.flowId) return;
     const params = {
       flowId: currentFlow?.flowId,
       id: selectedCardId,
@@ -434,7 +498,7 @@ const useVersionManagement = ({
         (item: VersionItem) => item?.id === selectedCardId
       );
       setRestoreVerName(versionData?.name ?? '');
-      initFlowData(currentFlow?.id);
+      if (currentFlow.id !== undefined) initFlowData(currentFlow.id);
       setHistoryVersionData(null);
       setHistoryVersion(false);
       setIsallowEdit(false);

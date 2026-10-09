@@ -73,12 +73,19 @@ function MCPDetailWrapper({
   );
 }
 
+interface McpDetailState {
+  setCurrentMcp: React.Dispatch<React.SetStateAction<MCPToolDetail | null>>;
+  tools: MCPToolDetail['tools'];
+  currentMcp: MCPToolDetail | null;
+  currentToolId?: string;
+}
+
 const useMCPDetail = ({
   setCurrentMcp,
   tools,
   currentMcp,
   currentToolId,
-}): UseMcpDetailProps => {
+}: McpDetailState): UseMcpDetailProps => {
   const { t } = useTranslation();
   const handleInputParamsChange = (
     toolIndex: number,
@@ -90,7 +97,7 @@ const useMCPDetail = ({
       if (tool) {
         const arg = tool.args?.find((item, index) => index === argIndex);
         if (arg) {
-          arg.value = value as string | unknown[] | Record<string, unknown>;
+          arg.value = value;
         }
       }
       return cloneDeep(mcp);
@@ -101,14 +108,16 @@ const useMCPDetail = ({
     toolIndex: number
   ): void => {
     e.stopPropagation();
-    const tool = tools?.find((_, index) => index === toolIndex);
-    if (!tool) return;
+    const tool = tools.find((_, index) => index === toolIndex);
+    if (!tool || !currentMcp || !currentToolId) return;
 
     const toolArgs: Record<string, unknown> = {};
     for (const item of tool.args || []) {
       toolArgs[item.name] =
         item.type === 'array' || item.type === 'object'
-          ? JSON.parse(item.value as string)
+          ? typeof item.value === 'string'
+            ? JSON.parse(item.value)
+            : item.value
           : item.value;
     }
     const params = {
@@ -264,13 +273,11 @@ export function MCPDetail({
   const childName = currentTool?.childName;
   const { t } = useTranslation();
   const [currentTab, setCurrentTab] = useState('content');
-  const [currentMcp, setCurrentMcp] = useState<MCPToolDetail>(
-    {} as MCPToolDetail
-  );
+  const [currentMcp, setCurrentMcp] = useState<MCPToolDetail | null>(null);
 
   const tools = useMemo(() => {
     return childName
-      ? currentMcp?.tools?.filter(item => item.name === childName)
+      ? (currentMcp?.tools.filter(item => item.name === childName) ?? [])
       : currentMcp?.tools || [];
   }, [currentMcp, childName]);
 
@@ -314,7 +321,7 @@ export function MCPDetail({
           <img src={publishIcon} className="w-3 h-3" alt="" />
           <p className="text-[#757575] text-xs">
             {t('workflow.nodes.toolNode.publishedAt')}{' '}
-            {dayjs(currentMcp['createTime'])?.format('YYYY-MM-DD HH:mm:ss')}
+            {dayjs(currentMcp?.createTime)?.format('YYYY-MM-DD HH:mm:ss')}
           </p>
         </div>
       </div>
@@ -345,14 +352,17 @@ export function MCPDetail({
           {currentTab === 'overview' && (
             <div className="w-full rounded-lg border border-[#E4EAFF] bg-[#fcfdff] px-4 py-3">
               <MarkdownRender
-                content={currentMcp?.overview}
+                content={currentMcp?.overview ?? ''}
                 isSending={false}
               />
             </div>
           )}
           {currentTab === 'content' && (
             <div className="rounded-lg border border-[#E4EAFF] bg-[#fcfdff] px-4 py-3">
-              <MarkdownRender content={currentMcp?.content} isSending={false} />
+              <MarkdownRender
+                content={currentMcp?.content ?? ''}
+                isSending={false}
+              />
             </div>
           )}
           {currentTab === 'tools' && (

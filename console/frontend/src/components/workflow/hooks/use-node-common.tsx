@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { syncIteratorEndInputs } from '../utils/iterator-outputs';
+import type { CheckboxProps } from 'antd';
+import React, { useCallback, useMemo, useState } from 'react';
+import type { WorkflowNode, WorkflowNodeData } from '../types/domain';
 import { cloneDeep } from 'lodash';
 import { useMemoizedFn } from 'ahooks';
 import { Tooltip, Checkbox } from 'antd';
@@ -48,7 +51,17 @@ import {
 import addItemIcon from '@/assets/imgs/workflow/add-item-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
 
-const useNodeInfo = ({ id, data }): UseNodeInfoReturn => {
+type OutputEditorProps = Required<NodeCommonProps> & { output: PropertyItem };
+
+function formatParameterDefault(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  return typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+}
+
+const useNodeInfo = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeInfoReturn => {
   const { t } = useTranslation();
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const showIterativeModal = useFlowsManager(state => state.showIterativeModal);
@@ -107,7 +120,7 @@ const useNodeInfo = ({ id, data }): UseNodeInfoReturn => {
   }, [nodeType]);
 
   const isIteratorChildNode = useMemo(() => {
-    return !showIterativeModal && data?.parentId;
+    return Boolean(!showIterativeModal && data.parentId);
   }, [showIterativeModal, data?.parentId]);
 
   const isAgentNode = useMemo(() => {
@@ -146,7 +159,7 @@ const useNodeInfo = ({ id, data }): UseNodeInfoReturn => {
   }, [data?.outputs, id]);
 
   const showExceptionFlow = useMemo(() => {
-    return (
+    return Boolean(
       data?.retryConfig?.shouldRetry && data?.retryConfig?.errorStrategy === 2
     );
   }, [data?.retryConfig?.shouldRetry, data?.retryConfig?.errorStrategy]);
@@ -301,7 +314,10 @@ const useNodeInfo = ({ id, data }): UseNodeInfoReturn => {
   };
 };
 
-const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
+const useNodeFunc = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeFuncReturn => {
   const { isIteratorNode, nodeType } = useNodeInfo({ id, data });
   const setNodeInfoEditDrawerlInfo = useFlowsManager(
     state => state.setNodeInfoEditDrawerlInfo
@@ -336,8 +352,8 @@ const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
     setOpenOperationResult(false);
   });
   // 通用的节点参数变更处理函数
-  const handleChangeNodeParam = useMemoizedFn(
-    (fn: (data: NodeDataType, value: unknown) => void, value: unknown) => {
+  const handleChangeNodeParam = useCallback(
+    <Value,>(fn: (data: NodeDataType, value: Value) => void, value: Value) => {
       setNode(id, old => {
         fn(old.data, value);
         return {
@@ -347,72 +363,64 @@ const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
       autoSaveCurrentFlow();
       canPublishSetNot();
       checkNode(id);
+    },
+    [id, setNode, autoSaveCurrentFlow, canPublishSetNot, checkNode]
+  );
+  const handleIteratorEndChange = useMemoizedFn(
+    (
+      type: 'add' | 'remove' | 'replace',
+      outputId: string,
+      value?: unknown,
+      currentNode?: WorkflowNode
+    ) => {
+      if (isIteratorNode) {
+        const outputIndex = currentNode?.data?.outputs?.findIndex(
+          output => output?.id === outputId
+        );
+        const iteratorStartEnd = nodes?.find(
+          node =>
+            node.data.parentId === id &&
+            ['iteration-node-end', 'node-end'].includes(node.nodeType)
+        );
+        if (!iteratorStartEnd) return;
+        setNode(iteratorStartEnd.id, old => {
+          old.data.inputs = syncIteratorEndInputs(
+            old.data.inputs,
+            type,
+            outputIndex ?? -1,
+            typeof value === 'string' ? value : undefined
+          );
+          return cloneDeep(old);
+        });
+      }
     }
   );
-  const handleChangeOutputParam = useMemoizedFn(
-    (
+  const handleChangeOutputParam = useCallback(
+    <Value,>(
       outputId: string,
-      fn: (data: OutputItem, value: unknown) => void,
-      value: unknown
+      fn: (
+        data: PropertyItem,
+        value: Value,
+        nodeData: WorkflowNodeData
+      ) => void,
+      value: Value
     ): void => {
       setNode(id, old => {
         const currentOutput = findItemById(old.data.outputs, outputId);
         if (currentOutput) {
           fn(currentOutput, value, old?.data);
         }
-        handleIteratorEndChange('replace', outputId, value, old);
+        handleIteratorEndChange('replace', outputId, currentOutput?.name, old);
         return {
           ...cloneDeep(old),
         };
       });
       updateNodeRef(id);
       canPublishSetNot();
-    }
+    },
+    [id, setNode, handleIteratorEndChange, updateNodeRef, canPublishSetNot]
   );
 
-  const handleIteratorEndChange = useMemoizedFn(
-    (
-      type: 'add' | 'remove' | 'replace',
-      outputId: string,
-      value?: unknown,
-      currentNode?: NodeDataType
-    ) => {
-      if (isIteratorNode) {
-        const outputIndex = currentNode?.data?.outputs?.findIndex(
-          output => output?.id === outputId
-        );
-        const currentIteratorInput = {
-          id: uuid(),
-          name: '',
-          schema: {
-            type: '',
-            value: {
-              type: 'ref',
-              content: {},
-            },
-          },
-        };
-        const iteratorStartEnd = nodes?.find(
-          node => node?.data?.parentId === id && node?.nodeType === 'node-end'
-        );
-        setNode(iteratorStartEnd?.id, old => {
-          if (type === 'add') {
-            old.data.inputs.push(currentIteratorInput);
-          } else if (type === 'remove') {
-            old.data.inputs = old.data.inputs.splice(outputIndex, 1, 0);
-          } else {
-            const currentInput = old.data.inputs?.find(
-              (_, index) => index === outputIndex
-            );
-            if (currentInput) {
-              currentInput.name = value;
-            }
-          }
-          return cloneDeep(old);
-        });
-      }
-    }
-  );
   const handleAddOutputLine = useMemoizedFn(() => {
     takeSnapshot();
     setNode(id, old => {
@@ -432,12 +440,17 @@ const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
     canPublishSetNot();
   });
   const handleRemoveOutputLine = useMemoizedFn((outputId: string) => {
+    const previousNode = cloneDeep(nodes.find(node => node.id === id));
     takeSnapshot();
     setNode(id, old => {
       const path = findPathById(old.data.outputs, outputId);
-      if (path && isJSON(old?.data?.retryConfig?.customOutput)) {
+      if (
+        path &&
+        old.data.retryConfig?.customOutput &&
+        isJSON(old.data.retryConfig.customOutput)
+      ) {
         const updatedObj = deleteFieldByPath(
-          cloneDeep(JSON.parse(old?.data?.retryConfig?.customOutput)),
+          cloneDeep(JSON.parse(old?.data?.retryConfig?.customOutput ?? '')),
           path
         );
         old.data.retryConfig.customOutput = JSON.stringify(updatedObj, null, 2);
@@ -449,10 +462,10 @@ const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
     });
     deleteNodeRef(id, outputId);
     canPublishSetNot();
-    handleIteratorEndChange('remove', outputId);
+    handleIteratorEndChange('remove', outputId, undefined, previousNode);
   });
-  const isFixedOutputComponentFunc = useMemoizedFn(output => {
-    return nodeType === 'database' && !output?.isChild;
+  const isFixedOutputComponentFunc = useMemoizedFn((output: PropertyItem) => {
+    return nodeType === 'database' && !output.isChild;
   });
   return {
     handleNodeClick,
@@ -465,7 +478,11 @@ const useNodeFunc = ({ id, data }): UseNodeFuncReturn => {
   };
 };
 
-const OutputNameInput = ({ id, data, output }): React.ReactElement => {
+const OutputNameInput = ({
+  id,
+  data,
+  output,
+}: OutputEditorProps): React.ReactElement => {
   const { handleChangeOutputParam } = useNodeFunc({ id, data });
   const { handleCustomOutputGenerate } = useNodeOutputRender({ id, data });
   const { isFixedOutputComponentFunc } = useNodeFunc({ id, data });
@@ -501,7 +518,11 @@ const OutputNameInput = ({ id, data, output }): React.ReactElement => {
 };
 
 // 类型选择器
-const OutputTypeSelector = ({ id, data, output }): React.ReactElement => {
+const OutputTypeSelector = ({
+  id,
+  data,
+  output,
+}: OutputEditorProps): React.ReactElement => {
   const { handleChangeOutputParam } = useNodeFunc({ id, data });
   const { outputTypeList } = useNodeOutputRender({ id, data });
   const currentStore = useFlowsManager(state => state.getCurrentStore());
@@ -511,21 +532,31 @@ const OutputTypeSelector = ({ id, data, output }): React.ReactElement => {
   if (isFixedOutputComponent) {
     return <div>{renderType(output)}</div>;
   }
-  const handleTypeChange = useMemoizedFn((value: unknown) => {
+  const handleTypeChange = useMemoizedFn((selected: unknown) => {
+    if (
+      !Array.isArray(selected) ||
+      !selected.every(
+        (item: unknown): item is string => typeof item === 'string'
+      )
+    )
+      return;
+    const [kind, fileType] = selected;
+    if (!kind) return;
+    const type = ['file', 'fileList'].includes(kind) ? fileType : kind;
+    if (!type) return;
     handleChangeOutputParam(
       output.id,
       (data, value) => {
-        const isFileType = ['file', 'fileList'].includes(value[0]);
-        const type = isFileType ? value[1] : value[0];
+        const { kind, type } = value;
 
-        if (value[0] === 'file') {
+        if (kind === 'file') {
           data.fileType = 'file';
           data.schema = { type: 'string' };
-          data.allowedFileType = [value[1]];
-        } else if (value[0] === 'fileList') {
+          data.allowedFileType = [type];
+        } else if (kind === 'fileList') {
           data.fileType = 'file';
           data.schema = { type: 'array-string' };
-          data.allowedFileType = [value[1].replace(/.*<(.+?)>.*/, '$1')];
+          data.allowedFileType = [type.replace(/.*<(.+?)>.*/, '$1')];
         } else if (data?.schema?.type) {
           data.schema.type = type;
           delete data.fileType;
@@ -544,7 +575,7 @@ const OutputTypeSelector = ({ id, data, output }): React.ReactElement => {
           }
         }
       },
-      value
+      { kind, type }
     );
 
     delayUpdateNodeRef(id);
@@ -555,9 +586,14 @@ const OutputTypeSelector = ({ id, data, output }): React.ReactElement => {
       value={
         output.fileType === 'file'
           ? output?.schema?.type === 'string'
-            ? ['file', output?.allowedFileType?.[0]]
-            : ['fileList', `Array<${output?.allowedFileType?.[0]}>`]
-          : output?.schema?.type || output.type
+            ? ['file', ...(output.allowedFileType?.slice(0, 1) ?? [])]
+            : [
+                'fileList',
+                ...(output.allowedFileType
+                  ?.slice(0, 1)
+                  .map(type => `Array<${type}>`) ?? []),
+              ]
+          : [output.schema?.type || output.type || 'string']
       }
       disabled={
         output?.deleteDisabled || output?.customParameterType === 'deepseekr1'
@@ -569,12 +605,20 @@ const OutputTypeSelector = ({ id, data, output }): React.ReactElement => {
 };
 
 // 描述/类型输入
-const OutputDescription = ({ id, data, output }): React.ReactElement => {
+const OutputDescription = ({
+  id,
+  data,
+  output,
+}: OutputEditorProps): React.ReactElement => {
   const { renderTypeInput } = useNodeInputRender({ id, data });
   const { isFixedOutputComponentFunc } = useNodeFunc({ id, data });
   const isFixedOutputComponent = isFixedOutputComponentFunc(output);
   if (isFixedOutputComponent) {
-    return <div>{output?.schema?.default || output?.default}</div>;
+    return (
+      <div>
+        {formatParameterDefault(output.schema?.default ?? output.default)}
+      </div>
+    );
   }
   return (
     <div
@@ -590,7 +634,11 @@ const OutputDescription = ({ id, data, output }): React.ReactElement => {
 };
 
 // 错误提示
-const OutputErrors = ({ output }): React.ReactElement => (
+const OutputErrors = ({
+  output,
+}: {
+  output: PropertyItem;
+}): React.ReactElement => (
   <div className="flex items-center gap-3 text-xs text-[#F74E43]">
     <div className="flex flex-col w-1/4">{output?.nameErrMsg}</div>
     <div className="flex flex-col w-1/4"></div>
@@ -600,7 +648,10 @@ const OutputErrors = ({ output }): React.ReactElement => (
   </div>
 );
 
-const useNodeOutputRender = ({ id, data }): UseNodeOutputRenderReturn => {
+const useNodeOutputRender = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeOutputRenderReturn => {
   const { outputs, currentNode, isStartNode, isIteratorNode } = useNodeInfo({
     id,
     data,
@@ -616,7 +667,7 @@ const useNodeOutputRender = ({ id, data }): UseNodeOutputRenderReturn => {
   const handleCustomOutputGenerate = useMemoizedFn(() => {
     delayUpdateNodeRef(id);
     setTimeout(() => {
-      if (!checkedNodeOutputData(outputs, currentNode)) {
+      if (!currentNode || !checkedNodeOutputData(outputs, currentNode)) {
         setNode(id, old => {
           old.data.nodeParam.setAnswerContentErrMsg =
             '输出中变量名校验不通过,自动生成JSON失败';
@@ -632,8 +683,8 @@ const useNodeOutputRender = ({ id, data }): UseNodeOutputRenderReturn => {
           const newSetAnswerContent = JSON.stringify(
             generateOrUpdateObject(
               old?.data.outputs,
-              isJSON(old?.data?.retryConfig?.customOutput)
-                ? JSON.parse(old?.data?.retryConfig?.customOutput)
+              isJSON(old?.data?.retryConfig?.customOutput ?? '')
+                ? JSON.parse(old?.data?.retryConfig?.customOutput ?? '')
                 : null
             ),
             null,
@@ -651,7 +702,7 @@ const useNodeOutputRender = ({ id, data }): UseNodeOutputRenderReturn => {
   });
 
   const renderOutputComponent = useMemoizedFn(
-    (output: OutputItem): React.ReactElement => {
+    (output: PropertyItem): React.ReactElement => {
       const type = output?.schema?.type || output?.type;
       return (
         <div className="w-full flex flex-col gap-1">
@@ -718,7 +769,10 @@ const useNodeOutputRender = ({ id, data }): UseNodeOutputRenderReturn => {
   };
 };
 
-const useNodeModels = ({ id, data }): UseNodeModelsReturn => {
+const useNodeModels = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeModelsReturn => {
   const agentModels = useFlowsManager(state => state.agentModels);
   const sparkLlmModels = useFlowsManager(state => state.sparkLlmModels);
   const questionAnswerModels = useFlowsManager(
@@ -762,7 +816,13 @@ const useNodeModels = ({ id, data }): UseNodeModelsReturn => {
 };
 
 // 新增按钮
-const AddButton = ({ type, handleAdd }): React.ReactElement | null => {
+const AddButton = ({
+  type,
+  handleAdd,
+}: {
+  type?: string;
+  handleAdd: () => void;
+}): React.ReactElement | null => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   if (canvasesDisabled || (type !== 'object' && type !== 'array-object'))
@@ -787,6 +847,10 @@ const RequiredCheckbox = ({
   isStartNode,
   output,
   handleRequiredChange,
+}: {
+  isStartNode: boolean;
+  output: PropertyItem;
+  handleRequiredChange: NonNullable<CheckboxProps['onChange']>;
 }): React.ReactElement | null => {
   if (!isStartNode) return null;
 
@@ -808,6 +872,8 @@ const RemoveButton = ({
   data,
   output,
   handleRemove,
+}: OutputEditorProps & {
+  handleRemove: () => void;
 }): React.ReactElement | null => {
   const { outputs, isDataBaseNode } = useNodeInfo({ id, data });
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
@@ -841,7 +907,7 @@ export const OutputActions = ({
   data,
   output,
   type,
-}): React.ReactElement => {
+}: OutputEditorProps & { type?: string }): React.ReactElement => {
   const { isStartNode } = useNodeInfo({ id, data });
   const { handleChangeOutputParam, handleRemoveOutputLine } = useNodeFunc({
     id,
@@ -853,7 +919,7 @@ export const OutputActions = ({
   const setNode = currentStore(state => state.setNode);
   const checkNode = currentStore(state => state.checkNode);
 
-  const handleAddItem = useMemoizedFn((output: OutputItem) => {
+  const handleAddItem = useMemoizedFn((output: PropertyItem) => {
     takeSnapshot();
     setNode(id, old => {
       const currentOutput = findItemById(old.data.outputs, output?.id);
@@ -870,8 +936,8 @@ export const OutputActions = ({
         } else {
           currentOutput.schema.properties = [propertyItem];
         }
-      } else {
-        if (currentOutput?.properties) {
+      } else if (currentOutput) {
+        if (currentOutput.properties) {
           currentOutput.properties.push(propertyItem);
         } else {
           currentOutput.properties = [propertyItem];
@@ -886,13 +952,15 @@ export const OutputActions = ({
 
   const handleAdd = useMemoizedFn(() => handleAddItem(output));
 
-  const handleRequiredChange = useMemoizedFn((e: unknown) => {
-    handleChangeOutputParam(
-      output.id,
-      (data, value) => (data.required = value),
-      e.target.checked
-    );
-  });
+  const handleRequiredChange = useMemoizedFn(
+    (e: Parameters<NonNullable<CheckboxProps['onChange']>>[0]) => {
+      handleChangeOutputParam(
+        output.id,
+        (data, value) => (data.required = value),
+        e.target.checked
+      );
+    }
+  );
 
   const handleRemove = useMemoizedFn(() => {
     if (
@@ -913,7 +981,10 @@ export const OutputActions = ({
   );
 };
 
-const useNodeHandle = ({ id, data }): UseNodeHandleReturn => {
+const useNodeHandle = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeHandleReturn => {
   const { nodeType } = useNodeInfo({ id, data });
   const showIterativeModal = useFlowsManager.getState().showIterativeModal;
   // 判断是否可连接
@@ -984,7 +1055,10 @@ const titleRender = (nodeData: {
   );
 };
 
-const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
+const useNodeInputRender = ({
+  id,
+  data,
+}: Required<NodeCommonProps>): UseNodeInputRenderReturn => {
   const { t } = useTranslation();
   const { isIteratorNode } = useNodeInfo({ id, data });
   const { handleChangeOutputParam } = useNodeFunc({ id, data });
@@ -1000,17 +1074,17 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
   const takeSnapshot = currentStore(state => state.takeSnapshot);
   const checkNode = currentStore(state => state.checkNode);
   const [focusTextareaId, setFocusTextareaId] = useState('');
-  const renderTypeInput = useMemoizedFn((output: OutputItem) => {
+  const renderTypeInput = useMemoizedFn((output: PropertyItem) => {
     return (
       <FlowNodeTextArea
         disabled={output?.customParameterType === 'deepseekr1'}
         placeholder={t('workflow.nodes.common.variableDescriptionPlaceholder')}
         maxLength={1000}
-        row={focusTextareaId === output?.id ? 3 : 1}
+        rows={focusTextareaId === output?.id ? 3 : 1}
         style={{
           height: focusTextareaId === output?.id ? 100 : 30,
         }}
-        value={output?.schema?.default || output?.default}
+        value={formatParameterDefault(output.schema?.default ?? output.default)}
         onChange={value =>
           handleChangeOutputParam(
             output.id,
@@ -1032,25 +1106,25 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
       />
     );
   });
-  const handleChangeInputParam = useMemoizedFn(
-    (
+  const handleChangeInputParam = useCallback(
+    <Value,>(
       inputId: string,
-      fn: (data: InputItem, value: unknown) => void,
-      value: unknown
+      fn: (data: InputItem, value: Value, nodeData: WorkflowNodeData) => void,
+      value: Value
     ) => {
       setNode(id, old => {
         const currentInput = old?.data?.inputs?.find(
           item => item?.id === inputId
         );
         if (currentInput) {
-          fn(currentInput, value);
+          fn(currentInput, value, old.data);
         }
         if (isIteratorNode) {
           const outputs = old?.data?.inputs?.map(input => ({
             id: input?.id,
             name: input?.name,
             schema: {
-              type: input?.schema?.type?.split('-')?.pop(),
+              type: input.schema.type.split('-').pop() ?? 'string',
               default: '',
             },
           }));
@@ -1059,11 +1133,12 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
               node?.data?.parentId === id &&
               node?.nodeType === 'iteration-node-start'
           );
-          setNode(iteratorStartNode?.id, old => {
-            old.data.outputs = outputs;
-            return cloneDeep(old);
-          });
-          updateNodeRef(iteratorStartNode?.id);
+          if (iteratorStartNode)
+            setNode(iteratorStartNode.id, old => {
+              old.data.outputs = outputs;
+              return cloneDeep(old);
+            });
+          if (iteratorStartNode) updateNodeRef(iteratorStartNode.id);
         }
         return {
           ...cloneDeep(old),
@@ -1071,7 +1146,16 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
       });
       autoSaveCurrentFlow();
       canPublishSetNot();
-    }
+    },
+    [
+      id,
+      setNode,
+      isIteratorNode,
+      nodes,
+      updateNodeRef,
+      autoSaveCurrentFlow,
+      canPublishSetNot,
+    ]
   );
   const handleAddInputLine = useMemoizedFn(() => {
     takeSnapshot();
@@ -1094,7 +1178,7 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
     checkNode(id);
     canPublishSetNot();
   });
-  const handleRemoveInputLine = useMemoizedFn(inputId => {
+  const handleRemoveInputLine = useMemoizedFn((inputId: string) => {
     takeSnapshot();
     setNode(id, old => {
       old.data.inputs = old.data.inputs.filter(item => item.id !== inputId);
@@ -1112,14 +1196,14 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
         'knowledge-pro-base',
         'iteration',
         'extractor-parameter',
-      ].includes(data?.nodeType) &&
+      ].includes(data.nodeType ?? '') &&
         data?.outputs?.length > 1) ||
       ![
         'knowledge-base',
         'knowledge-pro-base',
         'iteration',
         'extractor-parameter',
-      ]?.includes(data?.nodeType)
+      ]?.includes(data.nodeType ?? '')
     );
   }, [data]);
 
@@ -1134,8 +1218,19 @@ const useNodeInputRender = ({ id, data }): UseNodeInputRenderReturn => {
 
 export const useNodeCommon = ({
   id,
-  data,
+  data: suppliedData,
 }: NodeCommonProps): UseNodeCommonReturn => {
+  const currentStore = useFlowsManager(state => state.getCurrentStore());
+  const storedData = currentStore(
+    state => state.nodes.find(node => node.id === id)?.data
+  );
+  const data: WorkflowNodeData = suppliedData ??
+    storedData ?? {
+      nodeMeta: { aliasName: '' },
+      nodeParam: {},
+      inputs: [],
+      outputs: [],
+    };
   const nodeInfo = useNodeInfo({ id, data });
   const nodeFunc = useNodeFunc({ id, data });
   const nodeInputRender = useNodeInputRender({ id, data });
@@ -1153,7 +1248,7 @@ export const useNodeCommon = ({
           property.isChild = true;
           property.title = renderOutputComponent(property);
           if (property.properties && Array.isArray(property.properties)) {
-            addAgeToProperties(property.properties as PropertyItem[]);
+            addAgeToProperties(property.properties);
           }
         });
       }

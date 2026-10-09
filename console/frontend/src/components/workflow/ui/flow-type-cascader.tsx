@@ -1,10 +1,13 @@
 import React, { useState, memo } from 'react';
-import { Cascader } from 'antd';
+import { Cascader, type CascaderProps } from 'antd';
 import { cn } from '@/utils';
 
 import formSelect from '@/assets/imgs/main/icon_nav_dropdown.svg';
 
-function FlowTypeCascader({ className = '', ...reset }): React.ReactElement {
+function FlowTypeCascader({
+  className = '',
+  ...reset
+}: CascaderProps): React.ReactElement {
   const [open, setOpen] = useState(false);
 
   return (

@@ -1,3 +1,5 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
+import type { WorkflowInput } from '@/components/workflow/types/domain';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
@@ -14,7 +16,7 @@ import { renderType } from '@/components/workflow/utils/reactflowUtils';
 
 import desciptionIcon from '@/assets/imgs/workflow/desciption-icon.png';
 
-function InputName({ item }: { item: unknown }): React.ReactElement {
+function InputName({ item }: { item: WorkflowInput }): React.ReactElement {
   return (
     <span className="relative flex items-center gap-1.5 max-w-[80px]">
       <span className="flex-1 text-overflow" title={item?.name}>
@@ -23,9 +25,12 @@ function InputName({ item }: { item: unknown }): React.ReactElement {
       {item?.required && (
         <span className="text-[#F74E43] flex-shrink-0">*</span>
       )}
-      {(item?.description || item?.default) && (
+      {Boolean(item.description || item.default) && (
         <Tooltip
-          title={item?.description || item?.default}
+          title={
+            item.description ||
+            (typeof item.default === 'string' ? item.default : '')
+          }
           overlayClassName="white-tooltip"
         >
           <img src={desciptionIcon} className="w-[10px] h-[10px]" alt="" />
@@ -35,7 +40,7 @@ function InputName({ item }: { item: unknown }): React.ReactElement {
   );
 }
 
-function InputTypeTag({ item }: { item: unknown }): React.ReactElement {
+function InputTypeTag({ item }: { item: WorkflowInput }): React.ReactElement {
   return (
     <div className="bg-[#F0F0F0] py-1 px-2.5 rounded text-xs ml-1 flex-shrink-0">
       {renderType(item)}
@@ -43,7 +48,7 @@ function InputTypeTag({ item }: { item: unknown }): React.ReactElement {
   );
 }
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { t } = useTranslation();
   const { inputs } = useNodeCommon({ id, data });
   return (

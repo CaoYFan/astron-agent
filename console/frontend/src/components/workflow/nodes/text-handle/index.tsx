@@ -1,3 +1,18 @@
+import type { DataNode } from 'antd/es/tree';
+import type { TFunction } from 'i18next';
+import type { WorkflowNodeParameters } from '@/components/workflow/types/domain';
+type TextParameter = 'mode' | 'prompt' | 'separator';
+type ChangeTextParameter = <Key extends TextParameter>(
+  key: Key,
+  value: WorkflowNodeParameters[Key]
+) => void;
+type TextContext = NodePropsFor<
+  'id' | 'data' | 'nodeParam' | 'updateNodeRef' | 'delayCheckNode'
+> & { t: TFunction; handleChangeNodeParam: ChangeTextParameter };
+type TextPropsFor<Key extends keyof TextContext> = Pick<TextContext, Key>;
+
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, useCallback, memo, useState } from 'react';
 import {
   FLowTree,
@@ -22,7 +37,9 @@ const ModeSelector = ({
   handleChangeNodeParam,
   updateNodeRef,
   t,
-}): React.ReactElement => (
+}: TextPropsFor<
+  'id' | 'nodeParam' | 'handleChangeNodeParam' | 'updateNodeRef' | 't'
+>): React.ReactElement => (
   <FLowCollapse
     label={<div className="text-base font-medium">处理方式</div>}
     content={
@@ -59,7 +76,9 @@ const RuleSection = ({
   handleChangeNodeParam,
   delayCheckNode,
   t,
-}): React.ReactElement =>
+}: TextPropsFor<
+  'id' | 'data' | 'nodeParam' | 'handleChangeNodeParam' | 'delayCheckNode' | 't'
+>): React.ReactElement | null =>
   nodeParam?.mode === 0 ? (
     <FLowCollapse
       label={
@@ -70,6 +89,7 @@ const RuleSection = ({
       content={
         <div className="rounded-md px-[18px] pb-3 pointer-events-auto">
           <FlowTemplateEditor
+            id={id}
             data={data}
             value={nodeParam?.prompt}
             onChange={value => handleChangeNodeParam('prompt', value)}
@@ -88,7 +108,9 @@ const SeparatorSection = ({
   id,
   nodeParam,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: TextPropsFor<
+  'id' | 'nodeParam' | 'handleChangeNodeParam'
+>): React.ReactElement | null => {
   const { t } = useTranslation();
   const addTextNodeConfig = useFlowsManager(state => state.addTextNodeConfig);
   const removeTextNodeConfig = useFlowsManager(
@@ -218,8 +240,10 @@ const SeparatorSection = ({
   );
 };
 
-const OutputTree = ({ nodeParam }): React.ReactElement => {
-  const renderTitle = useCallback((name, type) => {
+const OutputTree = ({
+  nodeParam,
+}: NodePropsFor<'nodeParam'>): React.ReactElement => {
+  const renderTitle = useCallback((name: string, type: string) => {
     return (
       <div className="flex items-center gap-2">
         <span>{name}</span>
@@ -228,7 +252,7 @@ const OutputTree = ({ nodeParam }): React.ReactElement => {
     );
   }, []);
 
-  const treeData = useMemo(
+  const treeData = useMemo<DataNode[]>(
     () => [
       {
         title: renderTitle(
@@ -257,78 +281,81 @@ const OutputTree = ({ nodeParam }): React.ReactElement => {
 };
 
 // ===================== 主组件 =====================
-export const TextHandleDetail = memo(({ id, data }): React.ReactElement => {
-  const { nodeParam } = useNodeCommon({
-    id,
-    data,
-  });
-  const { t } = useTranslation();
-  const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
-  const currentStore = getCurrentStore();
-  const setNode = currentStore(state => state.setNode);
-  const delayCheckNode = currentStore(state => state.delayCheckNode);
-  const updateNodeRef = currentStore(state => state.updateNodeRef);
-  const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
-  const autoSaveCurrentFlow = useFlowsManager(
-    state => state.autoSaveCurrentFlow
-  );
+export const TextHandleDetail = memo(
+  ({ id, data }: NodeComponentProps): React.ReactElement => {
+    const { nodeParam } = useNodeCommon({
+      id,
+      data,
+    });
+    const { t } = useTranslation();
+    const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
+    const currentStore = getCurrentStore();
+    const setNode = currentStore(state => state.setNode);
+    const delayCheckNode = currentStore(state => state.delayCheckNode);
+    const updateNodeRef = currentStore(state => state.updateNodeRef);
+    const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
+    const autoSaveCurrentFlow = useFlowsManager(
+      state => state.autoSaveCurrentFlow
+    );
 
-  const handleChangeNodeParam = useCallback(
-    (key, value) => {
-      setNode(id, old => {
-        old.data.nodeParam[key] = value;
-        if (key === 'mode' && value === 0)
-          old.data.outputs[0].schema.type = 'string';
-        if (key === 'mode' && value === 1) {
-          old.data.outputs[0].schema.type = 'array-string';
-          old.data.inputs = [
-            {
-              id: uuid(),
-              name: 'input',
-              schema: { type: 'string', value: { type: 'ref', content: {} } },
-            },
-          ];
-        }
-        return { ...cloneDeep(old) };
-      });
-      autoSaveCurrentFlow();
-      canPublishSetNot();
-    },
-    [id, setNode, autoSaveCurrentFlow, canPublishSetNot]
-  );
+    const handleChangeNodeParam = useCallback<ChangeTextParameter>(
+      (key, value) => {
+        setNode(id, old => {
+          old.data.nodeParam[key] = value;
+          const output = old.data.outputs[0];
+          if (key === 'mode' && value === 0 && output)
+            output.schema.type = 'string';
+          if (key === 'mode' && value === 1) {
+            if (output) output.schema.type = 'array-string';
+            old.data.inputs = [
+              {
+                id: uuid(),
+                name: 'input',
+                schema: { type: 'string', value: { type: 'ref', content: {} } },
+              },
+            ];
+          }
+          return { ...cloneDeep(old) };
+        });
+        autoSaveCurrentFlow();
+        canPublishSetNot();
+      },
+      [id, setNode, autoSaveCurrentFlow, canPublishSetNot]
+    );
 
-  return (
-    <div id={id}>
-      <div className="p-[14px] pb-[6px]">
-        <div className="bg-[#fff] flex flex-col gap-2.5 pointer-events-auto">
-          <ModeSelector
-            id={id}
-            nodeParam={nodeParam}
-            handleChangeNodeParam={handleChangeNodeParam}
-            updateNodeRef={updateNodeRef}
-            t={t}
-          />
-          <Inputs id={id} data={data}>
-            <div className="text-base font-medium">
-              {t('workflow.nodes.textJoinerNode.input')}
-            </div>
-          </Inputs>
-          <RuleSection
-            id={id}
-            data={data}
-            nodeParam={nodeParam}
-            handleChangeNodeParam={handleChangeNodeParam}
-            delayCheckNode={delayCheckNode}
-            t={t}
-          />
-          <SeparatorSection
-            id={id}
-            nodeParam={nodeParam}
-            handleChangeNodeParam={handleChangeNodeParam}
-          />
-          <OutputTree nodeParam={nodeParam} />
+    return (
+      <div id={id}>
+        <div className="p-[14px] pb-[6px]">
+          <div className="bg-[#fff] flex flex-col gap-2.5 pointer-events-auto">
+            <ModeSelector
+              id={id}
+              nodeParam={nodeParam}
+              handleChangeNodeParam={handleChangeNodeParam}
+              updateNodeRef={updateNodeRef}
+              t={t}
+            />
+            <Inputs id={id} data={data}>
+              <div className="text-base font-medium">
+                {t('workflow.nodes.textJoinerNode.input')}
+              </div>
+            </Inputs>
+            <RuleSection
+              id={id}
+              data={data}
+              nodeParam={nodeParam}
+              handleChangeNodeParam={handleChangeNodeParam}
+              delayCheckNode={delayCheckNode}
+              t={t}
+            />
+            <SeparatorSection
+              id={id}
+              nodeParam={nodeParam}
+              handleChangeNodeParam={handleChangeNodeParam}
+            />
+            <OutputTree nodeParam={nodeParam} />
+          </div>
         </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);

@@ -1,3 +1,4 @@
+import { readModelAuthStatus, type ModelVersion } from './model-auth';
 import React, {
   useState,
   useEffect,
@@ -62,16 +63,6 @@ function index({ setCreateModal }: CreateBotProps): React.ReactElement {
   const [botIcon, setBotIcon] = useState<any>({});
   const [botColor, setBotColor] = useState('');
   const [showModal, setShowModal] = useState(false);
-  interface ModelVersion {
-    domain: string;
-    status: number;
-    name: string;
-    serviceId: string;
-    modelType: number;
-    info: string;
-    label?: string;
-    value?: string;
-  }
   const [versionList, setVersionList] = useState<ModelVersion[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [modelType, setModelType] = useState(1);
@@ -173,7 +164,8 @@ function index({ setCreateModal }: CreateBotProps): React.ReactElement {
   function getVersionList(appId: string) {
     if (!appId) return;
     setLoading(true);
-    modelAuthStatus(appId).then((list: ModelVersion[]) => {
+    modelAuthStatus(appId).then(data => {
+      const list = readModelAuthStatus(data);
       const mapped: ModelVersion[] = list.map(item => ({
         ...item,
         label: item.name,
@@ -184,7 +176,8 @@ function index({ setCreateModal }: CreateBotProps): React.ReactElement {
       setAppId(appId);
       getAutoAuthStatus(appId)
         .then(data => {
-          setAutoAuthStatus(data);
+          if (typeof data === 'number' && Number.isFinite(data))
+            setAutoAuthStatus(data);
         })
         .finally(() => setLoading(false));
     });
@@ -195,7 +188,7 @@ function index({ setCreateModal }: CreateBotProps): React.ReactElement {
       currentModelVersion &&
       (currentModelVersion.status === 1 || currentModelVersion.status === 0)
     ) {
-      const applyInfo = JSON.parse(currentModelVersion.info);
+      const applyInfo = JSON.parse(currentModelVersion.info || '{}');
       form.setFieldsValue({
         domain: currentModelVersion.domain,
         conc: applyInfo.conc,

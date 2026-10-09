@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import { FLowCollapse } from '@/components/workflow/ui';
 import InputParams from '@/components/workflow/nodes/components/inputs';
@@ -6,7 +7,7 @@ import ModelSelect from '@/components/workflow/nodes/components/model-select';
 import { useTranslation } from 'react-i18next';
 import ExceptionHandling from '@/components/workflow/nodes/components/exception-handling';
 
-export const ExtractorParameterDetail = memo(props => {
+export const ExtractorParameterDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { t } = useTranslation();
 

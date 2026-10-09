@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Ajv from 'ajv';
 import { renderType } from '@/components/workflow/utils/reactflowUtils';
@@ -6,21 +6,29 @@ import { cloneDeep } from 'lodash';
 import { renderParamInput } from '@/components/workflow/nodes/node-common';
 import { useMemoizedFn } from 'ahooks';
 import { FlowTextArea } from '@/components/workflow/ui';
+import type { ChatStoreType } from '@/components/workflow/types/zustand/chat';
+import {
+  finishFileUpload,
+  isStartInputValue,
+  isUploadFile,
+} from '../chat-state';
 
 // 类型导入
-import {
-  ChatInputProps,
-  StartNodeType,
-  FileUploadResponse,
-  FileUploadItem,
-  AjvValidationError,
-  UseChatInputProps,
-} from '@/components/workflow/types';
+import { StartNodeType, FileUploadItem } from '@/components/workflow/types';
+
+type ChatInputProps = Pick<
+  ChatStoreType,
+  | 'interruptChat'
+  | 'startNodeParams'
+  | 'setStartNodeParams'
+  | 'userInput'
+  | 'setUserInput'
+  | 'handleEnterKey'
+>;
 
 const useChatInput = (
-  startNodeParams: StartNodeType[],
-  setStartNodeParams: (params: StartNodeType[]) => void
-): UseChatInputProps => {
+  setStartNodeParams: ChatStoreType['setStartNodeParams']
+): Parameters<typeof renderParamInput>[2] => {
   const { t } = useTranslation();
   const uploadComplete = useMemoizedFn(
     (
@@ -28,23 +36,11 @@ const useChatInput = (
       index: number,
       fileId: string
     ): void => {
-      const target = event.currentTarget as XMLHttpRequest;
-      const res: FileUploadResponse = JSON.parse(target.responseText);
-      if (res.code === 0) {
-        setStartNodeParams(oldNodeParams => {
-          const defaultValue = oldNodeParams?.[index]?.default;
-          if (Array.isArray(defaultValue)) {
-            const file = (defaultValue as FileUploadItem[]).find(
-              item => item.id === fileId
-            );
-            if (file) {
-              file.loading = false;
-              file.url = res?.data?.[0] || '';
-            }
-          }
-          return cloneDeep(oldNodeParams);
-        });
-      }
+      if (!(event.currentTarget instanceof XMLHttpRequest)) return;
+      const response: unknown = JSON.parse(event.currentTarget.responseText);
+      setStartNodeParams(params =>
+        finishFileUpload(params, index, fileId, response)
+      );
     }
   );
 
@@ -58,25 +54,31 @@ const useChatInput = (
         url: '',
       };
 
-      if (Array.isArray(startNodeParams[index]?.default) && multiple) {
-        (startNodeParams[index].default as FileUploadItem[]).push(
-          fileUploadItem
-        );
-      } else {
-        startNodeParams[index].default = [fileUploadItem];
-      }
-      setStartNodeParams([...startNodeParams]);
+      setStartNodeParams(params =>
+        params.map((param, paramIndex) =>
+          paramIndex === index
+            ? {
+                ...param,
+                default:
+                  Array.isArray(param.default) && multiple
+                    ? [...param.default.filter(isUploadFile), fileUploadItem]
+                    : [fileUploadItem],
+              }
+            : param
+        )
+      );
     }
   );
 
   const handleDeleteFile = useMemoizedFn(
     (index: number, fileId: string): void => {
       setStartNodeParams(oldStartNodeParams => {
-        const defaultValue = oldStartNodeParams[index]?.default;
-        if (Array.isArray(defaultValue)) {
-          oldStartNodeParams[index].default = (
-            defaultValue as FileUploadItem[]
-          ).filter(file => fileId !== file?.id);
+        const input = oldStartNodeParams[index];
+        const defaultValue = input?.default;
+        if (input && Array.isArray(defaultValue)) {
+          input.default = defaultValue
+            .filter(isUploadFile)
+            .filter(file => fileId !== file.id);
         }
         return cloneDeep(oldStartNodeParams);
       });
@@ -90,10 +92,7 @@ const useChatInput = (
         const validate = ajv.compile(schema);
         const valid = validate(jsonData);
         if (!valid) {
-          const errors = validate?.errors as
-            | AjvValidationError[]
-            | null
-            | undefined;
+          const errors = validate.errors;
           return (
             (errors?.[0]?.instancePath?.slice(1) ?? '') +
             ' ' +
@@ -108,21 +107,31 @@ const useChatInput = (
     }
   );
 
-  const handleChangeParam = useMemoizedFn(
-    (index: number, fn, value: string | number | boolean): void => {
+  const handleChangeParam = useCallback(
+    <Value,>(
+      index: number,
+      fn: (data: { default?: unknown }, value: Value) => void,
+      value: Value
+    ): void => {
       setStartNodeParams(startNodeParams => {
         const currentInput: StartNodeType | undefined = startNodeParams.find(
           (_, i) => index === i
         );
         if (currentInput) {
-          fn(currentInput, value);
+          const draft: { default?: unknown } = {
+            default: currentInput.default,
+          };
+          fn(draft, value);
+          if (isStartInputValue(draft.default))
+            currentInput.default = draft.default;
+          else if (draft.default == null) currentInput.default = '';
           if (
             currentInput?.type === 'object' ||
             currentInput.type.includes('array')
           ) {
             if (currentInput?.validationSchema) {
               currentInput.errorMsg = validateInputJSON(
-                value as string,
+                typeof value === 'string' ? value : JSON.stringify(value),
                 currentInput.validationSchema
               );
             }
@@ -130,7 +139,8 @@ const useChatInput = (
         }
         return cloneDeep(startNodeParams);
       });
-    }
+    },
+    [setStartNodeParams, validateInputJSON]
   );
   return {
     uploadComplete,
@@ -154,7 +164,7 @@ function ChatInput({
     handleFileUpload,
     handleDeleteFile,
     handleChangeParam,
-  } = useChatInput(startNodeParams, setStartNodeParams);
+  } = useChatInput(setStartNodeParams);
 
   return (
     <div

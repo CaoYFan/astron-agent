@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo, useEffect, useMemo } from 'react';
 import Inputs from '@/components/workflow/nodes/components/inputs';
 import Outputs from '@/components/workflow/nodes/components/outputs';
@@ -10,11 +11,7 @@ import { Select, Slider, InputNumber, message } from 'antd';
 import { FLowCollapse } from '@/components/workflow/ui';
 
 export const IteratorDetail = memo(
-  (props: {
-    id: string;
-    data?: Record<string, unknown>;
-    selected?: boolean;
-  }): React.ReactElement => {
+  (props: NodeComponentProps): React.ReactElement => {
     const { id, data, selected } = props;
 
     const { t } = useTranslation();
@@ -178,7 +175,7 @@ export const IteratorDetail = memo(
       <div id={id}>
         <div className="p-[14px] pb-[6px]">
           <div className="bg-[#fff] py-4 rounded-lg flex flex-col gap-2.5">
-            <Inputs id={id} data={data as any} />
+            <Inputs id={id} data={data} />
             <FLowCollapse
               label={
                 <div className="text-base font-medium">
@@ -290,7 +287,7 @@ export const IteratorDetail = memo(
                 </div>
               }
             />
-            <Outputs id={id} data={data as any}>
+            <Outputs id={id} data={data}>
               <div className="text-base font-medium">
                 {t('workflow.nodes.iteratorNode.output')}
               </div>

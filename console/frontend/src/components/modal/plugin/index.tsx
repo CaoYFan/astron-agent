@@ -1,3 +1,4 @@
+import type { ToolImportData } from '@/services/plugin';
 import {
   Button,
   Select,
@@ -690,7 +691,7 @@ const ActionButtons: React.FC<{
   handlePreStep: () => void;
   handleNextStep: () => void;
   handlePublishTool: () => void;
-  updatePlugin: (tool: ToolItem) => void;
+  updatePlugin: (tool: ToolImportData) => void;
 }> = ({
   selectedCard,
   step,
@@ -784,7 +785,7 @@ export const CreateTool = forwardRef<
     ) => void;
   },
   {
-    currentToolInfo: ToolItem;
+    currentToolInfo: Partial<ToolItem>;
     handleCreateToolDone: () => void;
     showHeader: boolean;
     step: number;
@@ -973,17 +974,17 @@ export const CreateTool = forwardRef<
 );
 
 export const ToolDebugger: FC<{
-  currentToolInfo: ToolItem;
+  currentToolInfo: Partial<ToolItem>;
   handleClearData: () => void;
   showHeader?: boolean;
   offical?: boolean;
-  selectedCard: ToolItem;
+  selectedCard: Partial<ToolItem>;
 }> = ({
   currentToolInfo,
   handleClearData,
   showHeader = true,
   offical = false,
-  selectedCard = {} as ToolItem,
+  selectedCard = {},
 }) => {
   const { t } = useTranslation();
   const {
@@ -1060,7 +1061,7 @@ export const ToolDebugger: FC<{
 };
 
 export const ToolDetail: FC<{
-  currentToolInfo: ToolItem;
+  currentToolInfo: Partial<ToolItem>;
   handleClearData: () => void;
   handleToolDebugger: () => void;
 }> = ({ currentToolInfo, handleClearData, handleToolDebugger }) => {
@@ -1072,8 +1073,8 @@ export const ToolDetail: FC<{
 
   useEffect(() => {
     if (currentToolInfo?.id) {
-      const paramsData = isJSON(currentToolInfo?.webSchema)
-        ? JSON.parse(currentToolInfo?.webSchema)
+      const paramsData = isJSON(currentToolInfo?.webSchema || '')
+        ? JSON.parse(currentToolInfo?.webSchema || '{}')
         : {};
       setOutputParamsData(paramsData?.toolRequestOutput || []);
       setInputParamsData(paramsData?.toolRequestInput || []);

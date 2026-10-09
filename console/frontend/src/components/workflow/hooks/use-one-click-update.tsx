@@ -1,3 +1,9 @@
+import type { WorkflowNodeData } from '../types/domain';
+import {
+  handleModifyToolUrlParams,
+  findFromTwoItems,
+  transformTree,
+} from '../utils/reactflowUtils';
 import React, { useMemo, useCallback } from 'react';
 import { getToolLatestVersion, getToolVersionList } from '@/services/plugin';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
@@ -5,14 +11,19 @@ import { Popconfirm } from 'antd';
 import { cloneDeep } from 'lodash';
 import { useTranslation } from 'react-i18next';
 import { isJSON } from '@/utils';
-import { v4 as uuid } from 'uuid';
 import { getLatestWorkflow } from '@/services/flow';
 import { getRpaDetail } from '@/services/rpa';
 import { transRpaParameters } from '@/utils/rpa';
 
 import oneClickUpdate from '@/assets/imgs/plugin/one-click-update.svg';
 
-export const AgentNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
+export const AgentNodeOneClickUpdate = ({
+  id,
+  data,
+}: {
+  id: string;
+  data: WorkflowNodeData;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -30,34 +41,37 @@ export const AgentNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   }, [toolsList]);
 
   const handleOneClickUpdate = useCallback(() => {
-    const pluginIds = data?.nodeParam?.plugin?.toolsList
-      ?.filter(item => item?.type === 'tool')
-      ?.map(item => item?.toolId);
-    getToolLatestVersion(pluginIds?.join(',')).then(data => {
+    const pluginIds = toolsList
+      .filter(item => item.type === 'tool')
+      .map(item => item.toolId);
+    if (pluginIds.length === 0) return;
+    getToolLatestVersion(pluginIds).then(data => {
       setNode(id, old => {
-        const newTools = old?.data?.nodeParam?.plugin?.tools?.filter(
-          item =>
-            !pluginIds?.includes(item?.tool_id) && !pluginIds?.includes(item)
+        const plugin = (old.data.nodeParam.plugin ??= {});
+        const updatedIds = pluginIds.filter(
+          toolId => typeof data[toolId] === 'string' && data[toolId].length > 0
         );
-        Object.keys(data).forEach(key => {
-          newTools.push({
-            tool_id: key,
-            version: data[key] || 'V1.0',
-          });
+        // Old workflows also store string IDs and objects without a version.
+        // Preserve all untouched entries and never invent a fallback version.
+        const newTools = (plugin.tools ?? []).filter(item => {
+          const toolId = typeof item === 'string' ? item : item.tool_id;
+          return !updatedIds.includes(toolId);
         });
-        old.data.nodeParam.plugin.tools = newTools;
-        old.data.nodeParam.plugin.toolsList.forEach(item => {
+        updatedIds.forEach(toolId => {
+          newTools.push({ tool_id: toolId, version: data[toolId] });
+        });
+        plugin.tools = newTools;
+        (plugin.toolsList ?? []).forEach(item => {
+          if (item.type !== 'tool' || !updatedIds.includes(item.toolId)) return;
           item.isLatest = true;
-          if (item?.pluginName) {
-            item.name = item?.pluginName;
-          }
+          if (item.pluginName) item.name = item.pluginName;
         });
         return cloneDeep(old);
       });
       autoSaveCurrentFlow();
       canPublishSetNot();
     });
-  }, [setNode, id, data, autoSaveCurrentFlow, canPublishSetNot]);
+  }, [setNode, id, data, autoSaveCurrentFlow, canPublishSetNot, toolsList]);
 
   return (
     <>
@@ -96,7 +110,13 @@ export const AgentNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   );
 };
 
-export const ToolNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
+export const ToolNodeOneClickUpdate = ({
+  id,
+  data,
+}: {
+  id: string;
+  data: WorkflowNodeData;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -111,108 +131,12 @@ export const ToolNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
     return data?.isLatest === false;
   }, [data?.isLatest]);
 
-  const handleModifyToolUrlParams = (toolUrlParams): unknown[] => {
-    return toolUrlParams
-      ?.filter(item => item?.open !== false)
-      ?.map(item => ({
-        id: uuid(),
-        name: item.name,
-        type: item.type,
-        disabled: false,
-        required: item?.required,
-        description: item?.description,
-        schema: {
-          type: item?.type,
-          value: {
-            type: 'ref',
-            content: {},
-          },
-        },
-      }));
-  };
-
-  const findFromTwoItems = useCallback((tree): string[] => {
-    const result: string[] = [];
-
-    function traverse(node): void {
-      if (node.from === 1 && node?.fatherType !== 'array') {
-        result.push(node?.name);
-      }
-      if (node.children && node.children.length > 0) {
-        node.children.forEach(child => traverse(child));
-      }
-    }
-
-    tree.forEach(node => traverse(node));
-
-    return result;
-  }, []);
-
-  const transformTree = useCallback((inputArray): unknown[] => {
-    function transformItem(item, isFirstLevel = false): unknown {
-      // 如果节点 open === false，直接返回 null
-      if (item.open === false) return null;
-
-      const transformedItem = {
-        id: item.id || uuid(),
-        name: item.name,
-      };
-
-      if (isFirstLevel) {
-        transformedItem.schema = {
-          type: item.type,
-        };
-      } else {
-        transformedItem.type = item.type;
-      }
-
-      if (item.type === 'array') {
-        if (isFirstLevel) {
-          if (item?.children?.[0]?.type !== 'object') {
-            transformedItem.schema.type = `array-${item?.children?.[0]?.type}`;
-            transformedItem.schema.properties = [];
-          } else {
-            transformedItem.schema.type = 'array-object';
-            const children = item?.children?.[0]?.children || item.children;
-            transformedItem.schema.properties = children
-              ?.map(child => transformItem(child))
-              .filter(Boolean); // 过滤掉 null 的子节点
-          }
-        } else {
-          if (item?.children?.[0]?.type !== 'object') {
-            transformedItem.type = `array-${item?.children?.[0]?.type}`;
-            transformedItem.properties = [];
-          } else {
-            transformedItem.type = 'array-object';
-            const children = item?.children?.[0]?.children || item.children;
-            transformedItem.properties = children
-              ?.map(child => transformItem(child))
-              .filter(Boolean); // 过滤掉 null 的子节点
-          }
-        }
-      } else if (item.children) {
-        if (isFirstLevel) {
-          transformedItem.schema.type = 'object';
-          transformedItem.schema.properties = item.children
-            .map(child => transformItem(child))
-            .filter(Boolean); // 过滤掉 null 的子节点
-        } else {
-          transformedItem.type = 'object';
-          transformedItem.properties = item.children
-            .map(child => transformItem(child))
-            .filter(Boolean); // 过滤掉 null 的子节点
-        }
-      }
-
-      return transformedItem;
-    }
-
-    return inputArray.map(item => transformItem(item, true)).filter(Boolean); // 过滤掉 null 的顶层节点
-  }, []);
-
   const handleOneClickUpdate = useCallback(() => {
-    getToolVersionList(data?.nodeParam?.pluginId).then(data => {
-      const tool = data?.[0];
+    const pluginId = data.nodeParam.pluginId;
+    if (!pluginId) return;
+    getToolVersionList(pluginId).then(data => {
+      const tool = data[0];
+      if (!tool) return;
       setNode(id, old => {
         old.data.nodeParam.pluginId = tool.toolId;
         old.data.nodeParam.operationId = tool.operationId;
@@ -275,7 +199,13 @@ export const ToolNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   );
 };
 
-export const FlowNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
+export const FlowNodeOneClickUpdate = ({
+  id,
+  data,
+}: {
+  id: string;
+  data: WorkflowNodeData;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -291,7 +221,9 @@ export const FlowNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   }, [data?.isLatest]);
 
   const handleOneClickUpdate = useCallback(() => {
-    getLatestWorkflow({ flowId: data?.nodeParam?.flowId }).then(res => {
+    const flowId = data.nodeParam.flowId;
+    if (!flowId) return;
+    getLatestWorkflow({ flowId }).then(res => {
       setNode(id, old => {
         old.data.nodeParam.version = res.version;
         old.data.inputs = res?.ioInversion?.inputs || [];
@@ -340,7 +272,13 @@ export const FlowNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   );
 };
 
-export const RpaNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
+export const RpaNodeOneClickUpdate = ({
+  id,
+  data,
+}: {
+  id: string;
+  data: WorkflowNodeData;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -358,6 +296,7 @@ export const RpaNodeOneClickUpdate = ({ id, data }): React.ReactElement => {
   const handleOneClickUpdate = useCallback(() => {
     const rpaId = data?.nodeParam?.assistantId;
     const robotName = data?.nodeParam?.projectId;
+    if (rpaId === undefined) return;
     getRpaDetail(rpaId).then(res => {
       const robot = res?.robots?.find(r => r.project_id === robotName);
       if (!robot) return;

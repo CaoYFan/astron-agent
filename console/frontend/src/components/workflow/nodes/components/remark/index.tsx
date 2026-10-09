@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useRef, useEffect, useState } from 'react';
 import styles from './index.module.scss';
 import { useSize } from 'ahooks';
@@ -6,7 +7,7 @@ import cloneDeep from 'lodash/cloneDeep';
 import { useDebounceFn } from 'ahooks';
 import { useTranslation } from 'react-i18next';
 
-const Remark = (props: unknown): React.ReactElement => {
+const Remark = (props: NodeComponentProps): React.ReactElement => {
   const { id, data } = props;
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -30,7 +31,7 @@ const Remark = (props: unknown): React.ReactElement => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    setValue(data?.nodeParam?.remark);
+    setValue(data.nodeParam.remark ?? '');
   }, [data]);
 
   useEffect(() => {
@@ -84,12 +85,12 @@ const Remark = (props: unknown): React.ReactElement => {
     setActive(false);
   };
 
-  const handleKeyDown = (e: KeyboardEvent): void => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     e.stopPropagation();
   };
 
   const { run } = useDebounceFn(
-    (value): void => {
+    (value: string): void => {
       setNode(id, old => {
         old.data.nodeParam.remark = value;
         return {
@@ -128,10 +129,12 @@ const Remark = (props: unknown): React.ReactElement => {
   };
 
   const startDrag = (e: MouseEvent): void => {
+    const container = containerRef.current;
+    if (!container) return;
     e.stopPropagation();
     e.preventDefault();
     startYRef.current = e.clientY;
-    startHeightRef.current = containerRef.current.clientHeight;
+    startHeightRef.current = container.clientHeight;
     isDraggingRef.current = true;
     document.addEventListener('mousemove', handleDrag);
     document.addEventListener('mouseup', stopDrag);

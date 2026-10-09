@@ -1,10 +1,29 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-} from 'react';
+import type { TableColumnsType } from 'antd';
+import type { MCPToolDetail, ToolArg } from '@/types/plugin-store';
+import type { McpType } from '@/components/workflow/types/drawer/chat-debugger';
+
+interface McpChildRow {
+  key: string;
+  parentId: string;
+  sparkId: string;
+  name: string;
+  description: string;
+  updateTime: string;
+  inputSchema: MCPToolDetail['tools'][number]['inputSchema'];
+  args: (ToolArg & { id: string })[];
+}
+interface McpServerRow extends McpItem {
+  id: string;
+  key: string;
+  server_url: string;
+  spark_id: string;
+  mcpId: string;
+  toolId: string;
+  isMcp: boolean;
+  tools: McpChildRow[];
+}
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { getMcpServerList as getMcpServerListAPI } from '@/services/plugin';
 import { Tooltip } from 'antd';
@@ -23,7 +42,6 @@ import {
   McpItem,
   McpTabType,
   McpOperateType,
-  useAddMcpType,
 } from '@/components/workflow/types';
 import dayjs from 'dayjs';
 import { v4 as uuid } from 'uuid';
@@ -76,17 +94,17 @@ const McpList = ({
 }: {
   setToolOperate: (toolOperate: McpOperateType) => void;
   loading: boolean;
-  dataSource: McpItem[];
+  dataSource: McpServerRow[];
   expandedKeys: string[];
   setExpandedKeys: (expandedKeys: string[]) => void;
   setCurrentMcpInfo: (currentMcpInfo: McpItem) => void;
-  renderParamsTooltip: (data: McpItem) => React.ReactNode;
+  renderParamsTooltip: (data: McpChildRow) => React.ReactNode;
   toolsNode: NodeType[];
 }): React.ReactElement => {
   const { t } = useTranslation();
   const { handleAddMcpNode } = useFlowCommon();
 
-  const onExpand = record => {
+  const onExpand = (record: McpServerRow): void => {
     const isExpanded = expandedKeys.includes(record.key);
 
     if (isExpanded) {
@@ -97,12 +115,12 @@ const McpList = ({
   };
 
   const handleAddMCPNodeThrottle = useMemoizedFn(
-    throttle(tool => {
+    throttle((tool: McpType) => {
       handleAddMcpNode(tool);
     }, 1000)
   );
 
-  const columns = [
+  const columns: TableColumnsType<McpServerRow> = [
     {
       title: t('workflow.nodes.toolNode.tool'),
       dataIndex: 'name',
@@ -189,7 +207,7 @@ const McpList = ({
       },
     },
   ];
-  const subColumns = [
+  const subColumns: TableColumnsType<McpChildRow> = [
     {
       title: t('workflow.nodes.toolNode.tool'),
       dataIndex: 'name',
@@ -256,6 +274,7 @@ const McpList = ({
                 const tool = dataSource.find(
                   item => item.key === record.parentId
                 );
+                if (!tool) return;
                 setCurrentMcpInfo({
                   ...tool,
                   name: record.name,
@@ -288,9 +307,9 @@ const McpList = ({
                 const tool = dataSource.find(
                   item => item.key === record.parentId
                 );
+                if (!tool) return;
                 handleAddMCPNodeThrottle({
                   ...tool,
-                  key: record.key,
                   args: record.args,
                   name: record.name,
                   description: record.description,
@@ -303,14 +322,14 @@ const McpList = ({
     },
   ];
 
-  const expandedRowRender = record => {
+  const expandedRowRender = (record: McpServerRow): React.ReactElement => {
     return (
       <Table
         showHeader={false}
         columns={subColumns}
         dataSource={record?.tools}
         pagination={false}
-        rowKey={record => record?.key}
+        rowKey={(record: McpChildRow) => record.key}
         tableLayout="fixed"
       />
     );
@@ -331,8 +350,8 @@ const McpList = ({
           columns={columns}
           pagination={false}
           rowClassName={() => 'cursor-pointer'}
-          rowKey={record => record?.key}
-          onRow={record => {
+          rowKey={(record: McpServerRow) => record.key}
+          onRow={(record: McpServerRow) => {
             return {
               onClick: () => {
                 setCurrentMcpInfo({
@@ -356,13 +375,13 @@ const McpList = ({
   );
 };
 
-const useAddMcp = (): useAddMcpType => {
-  const { handleAddToolNode, resetBeforeAndWillNode } = useFlowCommon();
+const useAddMcp = () => {
+  const { resetBeforeAndWillNode } = useFlowCommon();
   const setMcpModalInfo = useFlowsManager(state => state.setMcpModalInfo);
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
   const nodes = currentStore(state => state.nodes);
-  const [dataSource, setDataSource] = useState<McpItem[]>([]);
+  const [dataSource, setDataSource] = useState<McpServerRow[]>([]);
   const [currentTab, setCurrentTab] = useState<McpTabType>('offical');
   const [toolOperate, setToolOperate] = useState<McpOperateType>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -375,7 +394,9 @@ const useAddMcp = (): useAddMcpType => {
   });
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
-  function transformSchemaToArray(schema) {
+  function transformSchemaToArray(
+    schema: MCPToolDetail['tools'][number]['inputSchema']
+  ): McpChildRow['args'] {
     const requiredFields = schema.required || [];
 
     return Object.entries(schema.properties || []).map(([name, property]) => {
@@ -394,27 +415,36 @@ const useAddMcp = (): useAddMcpType => {
     setLoading(true);
     getMcpServerListAPI()
       .then(data => {
-        const newData = data?.map(item => {
+        const newData = data.map((item): McpServerRow => {
           const key = uuid();
+          const serverId = item.spark_id || item.id;
           return {
             ...item,
             key,
-            toolId: item['spark_id'],
+            toolId: serverId,
+            spark_id: serverId,
+            mcpId: item.id,
+            childName: item.childName ?? '',
             description: item?.brief,
             icon: item['logo_url'],
             updateTime: dayjs(item['create_time'])?.format(
               'YYYY-MM-DD HH:mm:ss'
             ),
             isMcp: true,
-            tools: item?.tools?.map(tool => ({
-              ...tool,
-              key: uuid(),
-              parentId: key,
-              sparkId: item['spark_id'],
-              args: tool.inputSchema
-                ? transformSchemaToArray(tool.inputSchema)
-                : [],
-            })),
+            tools: (item.tools ?? []).map(
+              (tool): McpChildRow => ({
+                ...tool,
+                key: uuid(),
+                parentId: key,
+                sparkId: serverId,
+                updateTime: dayjs(item.create_time).format(
+                  'YYYY-MM-DD HH:mm:ss'
+                ),
+                args: tool.inputSchema
+                  ? transformSchemaToArray(tool.inputSchema)
+                  : [],
+              })
+            ),
           };
         });
         setDataSource(newData);
@@ -424,7 +454,7 @@ const useAddMcp = (): useAddMcpType => {
       });
   }
 
-  function renderParamsTooltip(data) {
+  function renderParamsTooltip(data: McpChildRow): React.ReactElement {
     return (
       <div>
         <div className="text-base font-semibold">{data?.name}</div>
@@ -432,7 +462,7 @@ const useAddMcp = (): useAddMcpType => {
         <div className="mt-3">
           {data?.args?.map(item => (
             <div
-              key={item?.key}
+              key={item.id}
               className="flex flex-col gap-1.5 py-2.5 border-t border-[#F2F2F2]"
             >
               <div className="flex items-center gap-2.5 text-sm">
@@ -446,13 +476,6 @@ const useAddMcp = (): useAddMcpType => {
       </div>
     );
   }
-
-  const handleAddToolNodeThrottle = useCallback(
-    throttle((tool: McpItem) => {
-      handleAddToolNode(tool);
-    }, 1000),
-    [nodes]
-  );
 
   const handleClearMCPData = (): void => {
     setToolOperate('');
@@ -477,7 +500,6 @@ const useAddMcp = (): useAddMcpType => {
     setCurrentTab,
     toolOperate,
     setToolOperate,
-    handleAddToolNodeThrottle,
     loading,
     setLoading,
     dataSource,

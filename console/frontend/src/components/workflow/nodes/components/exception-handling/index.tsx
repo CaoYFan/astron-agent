@@ -1,3 +1,20 @@
+import type { WorkflowNodeData } from '@/components/workflow/types/domain';
+
+type RetryConfiguration = NonNullable<WorkflowNodeData['retryConfig']>;
+type ChangeRetryConfiguration = <Key extends keyof RetryConfiguration>(
+  key: Key,
+  value: RetryConfiguration[Key],
+  afterChange?: (data: WorkflowNodeData, value: RetryConfiguration[Key]) => void
+) => void;
+type ExceptionContext = NodePropsFor<'id' | 'data' | 'currentNode'> &
+  ReturnType<typeof useExceptionHandling>;
+type ExceptionPropsFor<Key extends keyof ExceptionContext> = Pick<
+  ExceptionContext,
+  Key
+>;
+
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useCallback, useMemo } from 'react';
 import { Tooltip, Switch } from 'antd';
 import {
@@ -17,7 +34,6 @@ import { isJSON } from '@/utils';
 import { useTranslation } from 'react-i18next';
 import { useMemoizedFn } from 'ahooks';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import { UseExceptionHandlingReturn } from '@/components/workflow/types';
 
 import questionMark from '@/assets/imgs/common/questionmark.png';
 
@@ -25,7 +41,7 @@ const useExceptionHandling = ({
   id,
   data,
   currentNode,
-}): UseExceptionHandlingReturn => {
+}: NodePropsFor<'id' | 'data' | 'currentNode'>) => {
   const { t } = useTranslation();
   // 使用国际化翻译的选项
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
@@ -98,16 +114,11 @@ const useExceptionHandling = ({
     [t]
   );
 
-  const handleChangeNodeParam = useCallback(
-    (key, value, fn?) => {
+  const handleChangeNodeParam = useCallback<ChangeRetryConfiguration>(
+    (key, value, fn) => {
       setNode(id, old => {
-        if (old?.data?.retryConfig) {
-          old.data.retryConfig[key] = value;
-        } else {
-          old.data.retryConfig = {
-            [key]: value,
-          };
-        }
+        const retry = old.data.retryConfig ?? (old.data.retryConfig = {});
+        retry[key] = value;
         fn && fn(old.data, value);
         return {
           ...cloneDeep(old),
@@ -151,36 +162,41 @@ const useExceptionHandling = ({
       : [];
   }, [showExceptionHandlingOutput, t]);
 
-  const handleAddExceptionHandlingEdge = useCallback(data => {
-    if (!data?.nodeParam?.exceptionHandlingEdge) {
-      data.nodeParam.exceptionHandlingEdge = `fail_one_of::${uuid()}`;
-    }
-    if (!data?.nodeParam?.handlingEdge) {
-      const handlingEdge = `normal_one_of::${uuid()}`;
-      data.nodeParam.handlingEdge = handlingEdge;
-      setEdges(edges => {
-        return edges.map(edge => {
-          if (edge?.source === id) {
-            edge.sourceHandle = handlingEdge;
-            edge.id = `reactflow__edge-${edge?.source}${handlingEdge}-${edge?.target}`;
-          }
-          return edge;
+  const handleAddExceptionHandlingEdge = useCallback(
+    (data: WorkflowNodeData) => {
+      if (!data?.nodeParam?.exceptionHandlingEdge) {
+        data.nodeParam.exceptionHandlingEdge = `fail_one_of::${uuid()}`;
+      }
+      if (!data?.nodeParam?.handlingEdge) {
+        const handlingEdge = `normal_one_of::${uuid()}`;
+        data.nodeParam.handlingEdge = handlingEdge;
+        setEdges(edges => {
+          return edges.map(edge => {
+            if (edge?.source === id) {
+              edge.sourceHandle = handlingEdge;
+              edge.id = `reactflow__edge-${edge?.source}${handlingEdge}-${edge?.target}`;
+            }
+            return edge;
+          });
         });
-      });
-    }
-  }, []);
-  const handleCustomOutput = useMemoizedFn(data => {
+      }
+    },
+    []
+  );
+  const handleCustomOutput = useMemoizedFn((data: WorkflowNodeData) => {
+    if (!currentNode) return;
+    const retry = data.retryConfig ?? (data.retryConfig = {});
     if (!checkedNodeOutputData(data?.outputs, currentNode)) {
-      data.retryConfig.customOutput = JSON.stringify({ output: '' }, null, 2);
+      retry.customOutput = JSON.stringify({ output: '' }, null, 2);
       data.nodeParam.setAnswerContentErrMsg = t(
         'workflow.exceptionHandling.validationMessages.outputVariableNameValidationFailed'
       );
     } else {
-      data.retryConfig.customOutput = JSON.stringify(
+      retry.customOutput = JSON.stringify(
         generateOrUpdateObject(
           data?.outputs,
-          isJSON(data?.retryConfig.customOutput)
-            ? JSON.parse(data?.retryConfig.customOutput)
+          isJSON(retry.customOutput ?? '')
+            ? JSON.parse(retry.customOutput ?? 'null')
             : null
         ),
         null,
@@ -223,7 +239,14 @@ const ExceptionHandlingSwitch = ({
   handleAddExceptionHandlingEdge,
   handleRemoveExceptionHandlingEdge,
   handleCustomOutput,
-}): React.ReactElement => {
+}: ExceptionPropsFor<
+  | 'id'
+  | 'data'
+  | 'handleChangeNodeParam'
+  | 'handleAddExceptionHandlingEdge'
+  | 'handleRemoveExceptionHandlingEdge'
+  | 'handleCustomOutput'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const updateNodeRef = currentStore(state => state.updateNodeRef);
@@ -253,7 +276,7 @@ const ExceptionHandlingSwitch = ({
               handleRemoveExceptionHandlingEdge();
             }
             if (!value) {
-              Reflect.deleteProperty(oldData?.retryConfig, 'customOutput');
+              if (oldData.retryConfig) delete oldData.retryConfig.customOutput;
             }
             if (value && oldData?.retryConfig?.errorStrategy === 1) {
               handleCustomOutput(oldData);
@@ -275,7 +298,16 @@ const ExceptionHandlingForm = ({
   handleChangeNodeParam,
   handleRemoveExceptionHandlingEdge,
   handleCustomOutput,
-}): React.ReactElement => {
+}: ExceptionPropsFor<
+  | 'id'
+  | 'data'
+  | 'currentNode'
+  | 'retryTimesOptions'
+  | 'exceptionHandlingMethodOptions'
+  | 'handleChangeNodeParam'
+  | 'handleRemoveExceptionHandlingEdge'
+  | 'handleCustomOutput'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const updateNodeRef = currentStore(state => state.updateNodeRef);
@@ -334,7 +366,7 @@ const ExceptionHandlingForm = ({
                   handleRemoveExceptionHandlingEdge();
                 }
                 if (value === 0 || value === 2) {
-                  Reflect.deleteProperty(data?.retryConfig, 'customOutput');
+                  if (data.retryConfig) delete data.retryConfig.customOutput;
                 }
                 if (value === 1) {
                   handleCustomOutput(data);
@@ -364,7 +396,9 @@ const ExceptionHandlingForm = ({
 const ExceptionHandlingCustomOutput = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement | null => {
+}: ExceptionPropsFor<
+  'data' | 'handleChangeNodeParam'
+>): React.ReactElement | null => {
   const { t } = useTranslation();
   if (data?.retryConfig?.errorStrategy !== 1) return null;
   return (
@@ -404,7 +438,9 @@ const ExceptionHandlingCustomOutput = ({
 const ExceptionHandlingOutputPreview = ({
   showExceptionHandlingOutput,
   exceptionHandlingOutput,
-}): React.ReactElement | null => {
+}: ExceptionPropsFor<
+  'showExceptionHandlingOutput' | 'exceptionHandlingOutput'
+>): React.ReactElement | null => {
   const { t } = useTranslation();
   if (!showExceptionHandlingOutput) return null;
   return (
@@ -424,7 +460,7 @@ const ExceptionHandlingOutputPreview = ({
   );
 };
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { currentNode } = useNodeCommon({
     id,
     data,

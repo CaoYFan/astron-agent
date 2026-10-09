@@ -1,3 +1,5 @@
+import type { MutableRefObject } from 'react';
+import type { WorkflowReference } from '../types/domain';
 import { v4 as uuid } from 'uuid';
 import { baseURL } from '@/utils/http';
 
@@ -35,7 +37,9 @@ export const getAuthorization = (): string => {
   return `Bearer ${localStorage.getItem('accessToken')}`;
 };
 
-export const handleFlowExport = (currentFlow: unknown): void => {
+export const handleFlowExport = (
+  currentFlow: { id?: string; name?: string } | undefined
+): void => {
   fetch(getFixedUrl(`/workflow/export/${currentFlow?.id}`), {
     method: 'GET',
     headers: {
@@ -56,7 +60,11 @@ export const handleFlowExport = (currentFlow: unknown): void => {
   });
 };
 
-export const findPathToNode = (tree, key, path = []): unknown => {
+export const findPathToNode = (
+  tree: WorkflowReference[],
+  key: string,
+  path: string[] = []
+): string[] | null => {
   for (const node of tree) {
     const label =
       node?.type === 'array-object' ? node?.label + '[0]' : node?.label;
@@ -74,7 +82,10 @@ export const findPathToNode = (tree, key, path = []): unknown => {
   return null;
 };
 
-export const findNodeByKey = (data, key): unknown => {
+export const findNodeByKey = (
+  data: WorkflowReference[],
+  key: string
+): WorkflowReference | null => {
   for (const node of data) {
     if (node.id === key) {
       return node;
@@ -91,13 +102,13 @@ export const findNodeByKey = (data, key): unknown => {
 
 export const getCurrentLineContent = (): string | undefined => {
   const selection = window.getSelection();
-  if (!selection.rangeCount) return;
+  if (!selection?.rangeCount) return;
 
   const range = selection.getRangeAt(0);
   const selectedNode = range.startContainer;
 
   // 查找到包含光标的最高父元素（如 <div>）
-  let currentLine = selectedNode;
+  let currentLine: Node | null = selectedNode;
   while (currentLine && currentLine.nodeType !== Node.ELEMENT_NODE) {
     currentLine = currentLine.parentNode;
   }
@@ -122,8 +133,11 @@ export const getCurrentLineContent = (): string | undefined => {
   return;
 };
 
-export const handleReplaceInput = (replaceSpanRef): void => {
+export const handleReplaceInput = (
+  replaceSpanRef: MutableRefObject<boolean>
+): void => {
   const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
   const range = selection.getRangeAt(0);
   const currentLineContent = getCurrentLineContent();
   const cursorPosition = range.startOffset;
@@ -144,8 +158,11 @@ export const handleReplaceInput = (replaceSpanRef): void => {
 
     if (startContainer.nodeType === Node.TEXT_NODE) {
       // 在当前文本节点中替换内容
-      const textBefore = startContainer.textContent.slice(0, offset - 1); // 去掉最后一个 "{"
-      const textAfter = startContainer.textContent.slice(offset);
+      const textBefore = (startContainer.textContent ?? '').slice(
+        0,
+        offset - 1
+      ); // 去掉最后一个 "{"
+      const textAfter = (startContainer.textContent ?? '').slice(offset);
 
       // 更新当前文本节点内容，去掉最后输入的 "{"
       startContainer.textContent = textBefore + textAfter;
@@ -162,7 +179,7 @@ export const handleReplaceInput = (replaceSpanRef): void => {
     // span?.parentNode?.insertBefore(textNode, span?.nextSibling);
 
     // 设置光标在 "{{}}" 中间的 `{` 后
-    range.setStart(span.firstChild, 2); // 光标位于 "{{}}" 中的 `{` 后
+    if (span.firstChild) range.setStart(span.firstChild, 2); // 光标位于 "{{}}" 中的 `{` 后
     range.collapse(true);
 
     // 清除现有的选区并设置新的 Range
@@ -174,31 +191,37 @@ export const handleReplaceInput = (replaceSpanRef): void => {
   }
 };
 
-export const handleReplaceSpan = (isComposingRef): void => {
+export const handleReplaceSpan = (
+  isComposingRef: MutableRefObject<boolean>
+): void => {
   if (isComposingRef.current) return;
   // 获取光标位置的范围
   const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
   const range = selection.getRangeAt(0);
 
   // 获取当前光标的父元素
   const parentNode = range.startContainer.parentNode;
 
   // 判断是否在 `{{input}}` 的 `span` 标签之后
-  if (parentNode.tagName === 'SPAN' && parentNode.style.color === 'blue') {
+  if (
+    parentNode instanceof HTMLSpanElement &&
+    parentNode.style.color === 'blue'
+  ) {
     // 确保光标位置在 `</span>` 后
     const span = parentNode;
-    if (range.startOffset === span.textContent.length) {
+    if (range.startOffset === (span.textContent ?? '').length) {
       // 在 `span` 外部插入文字
-      const str = span.textContent;
+      const str = span.textContent ?? '';
       const regex = /\}\}(.)/;
       const match = str.match(regex);
-      const index = match?.index + 2;
+      const index = (match?.index ?? 0) + 2;
       if (match) {
         const newTextNode = document.createTextNode(
-          range.startContainer.nodeValue.slice(index)
+          (range.startContainer.nodeValue ?? '').slice(index)
         );
-        span.textContent = span.textContent?.slice(0, index);
-        span.parentNode.insertBefore(newTextNode, span.nextSibling);
+        span.textContent = (span.textContent ?? '').slice(0, index);
+        span.parentNode?.insertBefore(newTextNode, span.nextSibling);
 
         // 修正光标位置到新插入的文字节点
         selection.removeAllRanges();
@@ -213,10 +236,10 @@ export const handleReplaceSpan = (isComposingRef): void => {
       // 在 span 开始位置插入文本节点
       const index = 1;
       const newTextNode = document.createTextNode(
-        range.startContainer.nodeValue.slice(0, index)
+        (range.startContainer.nodeValue ?? '').slice(0, index)
       );
-      span.textContent = span.textContent?.slice(index);
-      span.parentNode.insertBefore(newTextNode, span);
+      span.textContent = (span.textContent ?? '').slice(index);
+      span.parentNode?.insertBefore(newTextNode, span);
 
       // 修正光标位置到新插入的文字节点
       selection.removeAllRanges();
@@ -227,7 +250,10 @@ export const handleReplaceSpan = (isComposingRef): void => {
   }
 };
 
-export const findNodeByValue = (value, nodes): unknown | null => {
+export const findNodeByValue = (
+  value: string,
+  nodes: WorkflowReference[]
+): WorkflowReference | null => {
   for (const node of nodes) {
     // 检查当前节点的值是否匹配
     if (node.value === value) {
