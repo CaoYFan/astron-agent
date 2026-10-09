@@ -8,8 +8,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Arrays;
-import java.util.Random;
 
 /**
  * Provides interfaces for receiving and pushing encrypted/decrypted messages to/from WeChat
@@ -21,6 +21,7 @@ import java.util.Random;
  * </ol>
  */
 public class WXBizMsgCrypt {
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     static Charset CHARSET = StandardCharsets.UTF_8;
     Base64 base64 = new Base64();
     byte[] aesKey;
@@ -82,10 +83,9 @@ public class WXBizMsgCrypt {
     // Randomly generate 16-character string
     String getRandomStr() {
         String base = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        Random random = new Random();
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 16; i++) {
-            int number = random.nextInt(base.length());
+            int number = SECURE_RANDOM.nextInt(base.length());
             sb.append(base.charAt(number));
         }
         return sb.toString();

@@ -2,6 +2,9 @@
 
 This document provides detailed descriptions of the environment variables required by the system, including middleware, service ports, authentication, access addresses, and more. Business capability accounts such as iFLYTEK Open Platform, AI Ability Chat, Virtual Man, and Knowledge Base Platform have moved to the console **Platform Account Management** page and are no longer written to `.env`.
 
+For cryptographic defaults, external compatibility paths, and TLS limitations,
+see [Cryptographic mechanisms and deployment limits](CRYPTOGRAPHY.md).
+
 ## Quick Start
 
 ### Required Manual Configuration Fields
