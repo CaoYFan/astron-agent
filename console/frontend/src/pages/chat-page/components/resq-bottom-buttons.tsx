@@ -74,7 +74,7 @@ const ResqBottomButtons = ({
           return;
         }
         if (vmsInteractiveRefStatus === 'init') {
-          setCurrentPlayingId(answerInfo?.id);
+          setCurrentPlayingId(answerInfo?.id ?? null);
           if (answerInfo?.message.length >= 2000) {
             processStringByChunk(answerInfo?.message, 2000, chunk => {
               isPureText(chunk) &&

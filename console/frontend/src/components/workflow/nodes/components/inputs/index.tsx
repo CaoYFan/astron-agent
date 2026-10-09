@@ -1,4 +1,11 @@
-import React, { useMemo, memo } from 'react';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
+import { inputReference } from '@/components/workflow/nodes/types';
+import type { ChangeInputParameter } from '@/components/workflow/nodes/types';
+import type {
+  WorkflowInput,
+  WorkflowReference,
+} from '@/components/workflow/types/domain';
+import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   FlowNodeInput,
@@ -14,11 +21,26 @@ import { EnabledChatHistory } from '@/components/workflow/nodes/components/singl
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
 
+interface InputFieldProps extends NodeComponentProps {
+  item: WorkflowInput;
+}
+
+interface InputChangeProps {
+  id: string;
+  item: WorkflowInput;
+  handleChangeInputParam: ChangeInputParameter;
+}
+
+interface ReferenceFieldProps extends InputChangeProps {
+  isFixedInputsNode: boolean;
+  references: WorkflowReference[];
+}
+
 function NameField({
   id,
   item,
   handleChangeInputParam,
-}: unknown): React.ReactElement {
+}: InputChangeProps): React.ReactElement {
   if (item?.customParameterType === 'image_understanding') {
     return (
       <div className="flex items-center gap-2">
@@ -38,7 +60,11 @@ function NameField({
     />
   );
 }
-export function TypeSelector({ id, data, item }: unknown): React.ReactElement {
+export function TypeSelector({
+  id,
+  data,
+  item,
+}: InputFieldProps): React.ReactElement {
   const { handleChangeInputParam, isIteratorNode, isFixedInputsNode } =
     useNodeCommon({
       id,
@@ -54,18 +80,25 @@ export function TypeSelector({ id, data, item }: unknown): React.ReactElement {
         { label: t('workflow.nodes.common.input'), value: 'literal' },
         { label: t('workflow.nodes.common.reference'), value: 'ref' },
       ]}
-      onChange={value =>
+      onChange={(value: 'literal' | 'ref') =>
         handleChangeInputParam(
           item.id,
           (data, val) => {
-            data.schema.value.type = val;
             if (val === 'literal') {
-              data.schema.value.content = '';
+              data.schema.value = {
+                ...data.schema.value,
+                type: 'literal',
+                content: '',
+              };
               if (!isFixedInputsNode) {
                 data.schema.type = 'string';
               }
             } else {
-              data.schema.value.content = {};
+              data.schema.value = {
+                ...data.schema.value,
+                type: 'ref',
+                content: {},
+              };
             }
           },
           value
@@ -75,7 +108,11 @@ export function TypeSelector({ id, data, item }: unknown): React.ReactElement {
   );
 }
 
-export function ValueField({ id, data, item }: unknown): React.ReactElement {
+export function ValueField({
+  id,
+  data,
+  item,
+}: InputFieldProps): React.ReactElement {
   const { references, handleChangeInputParam, isFixedInputsNode } =
     useNodeCommon({ id, data });
   const valueType = item?.schema?.value?.type;
@@ -106,11 +143,17 @@ export function LiteralField({
   id,
   item,
   handleChangeInputParam,
-}: unknown): React.ReactElement {
+}: InputChangeProps): React.ReactElement {
   return (
     <FlowNodeInput
       nodeId={id}
-      value={item?.schema?.value?.content}
+      value={
+        item.schema.value.type === 'literal'
+          ? typeof item.schema.value.content === 'string'
+            ? item.schema.value.content
+            : JSON.stringify(item.schema.value.content)
+          : ''
+      }
       onChange={value =>
         handleChangeInputParam(
           item.id,
@@ -122,7 +165,11 @@ export function LiteralField({
   );
 }
 
-function RemoveButton({ id, data, item }: unknown): React.ReactElement {
+function RemoveButton({
+  id,
+  data,
+  item,
+}: InputFieldProps): React.ReactElement | null {
   const { allowNoInputParams, canvasesDisabled, handleRemoveInputLine } =
     useNodeCommon({ id, data });
   if (!allowNoInputParams || canvasesDisabled) return null;
@@ -149,23 +196,25 @@ function ReferenceField({
   item,
   references,
   handleChangeInputParam,
-}: unknown): React.ReactElement {
+}: ReferenceFieldProps): React.ReactElement {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const checkNode = currentStore(state => state.checkNode);
   const autoSaveCurrentFlow = useFlowsManager(
     state => state.autoSaveCurrentFlow
   );
-  const cascaderValue = item?.schema?.value?.content?.nodeId
-    ? [item?.schema?.value?.content?.nodeId, item?.schema?.value?.content?.name]
-    : [];
+  const reference = inputReference(item);
+  const cascaderValue =
+    reference?.nodeId && reference.name
+      ? [reference.nodeId, reference.name]
+      : [];
 
-  const handleSelect = (node: unknown): void =>
+  const handleSelect = (node: WorkflowReference): void =>
     handleChangeInputParam(
       item.id,
       (data, val) => {
         data.schema.value.content = val.content;
         if (!isFixedInputsNode) {
-          data.schema.type = val.type;
+          data.schema.type = val.type ?? data.schema.type;
         }
         data.fileType = val.fileType;
       },
@@ -193,7 +242,11 @@ function ReferenceField({
   );
 }
 
-export function ErrorMessages({ item }: unknown): React.ReactElement {
+export function ErrorMessages({
+  item,
+}: {
+  item: WorkflowInput;
+}): React.ReactElement {
   return (
     <div className="flex items-center gap-3 text-xs text-[#F74E43]">
       <div className="flex flex-col w-1/3">{item?.nameErrMsg}</div>
@@ -205,7 +258,12 @@ export function ErrorMessages({ item }: unknown): React.ReactElement {
   );
 }
 
-function index({ id, data }): React.ReactElement {
+function index({
+  id,
+  data,
+}: React.PropsWithChildren<NodeComponentProps> & {
+  allowAdd?: boolean;
+}): React.ReactElement {
   const {
     inputs,
     isIteratorNode,

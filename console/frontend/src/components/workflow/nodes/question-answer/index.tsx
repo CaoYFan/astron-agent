@@ -1,3 +1,6 @@
+import type { AnswerOption } from '@/components/workflow/types/domain';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, memo } from 'react';
 import {
   FlowSelect,
@@ -17,7 +20,14 @@ import { SourceHandle } from '@/components/workflow/nodes/components/handle';
 import { ModelSection } from '@/components/workflow/nodes/node-common';
 
 const QuestionSection = memo(
-  ({ id, data, delayCheckNode, handleChangeNodeParam }): React.ReactElement => {
+  ({
+    id,
+    data,
+    delayCheckNode,
+    handleChangeNodeParam,
+  }: NodePropsFor<
+    'id' | 'data' | 'delayCheckNode' | 'handleChangeNodeParam'
+  >): React.ReactElement => {
     const { t } = useTranslation();
     return (
       <FLowCollapse
@@ -63,7 +73,16 @@ const AnswerModeSection = memo(
     edges,
     setEdges,
     removeNodeRef,
-  }): React.ReactElement => {
+  }: NodePropsFor<
+    | 'id'
+    | 'data'
+    | 'nodeParam'
+    | 'canvasesDisabled'
+    | 'handleChangeNodeParam'
+    | 'edges'
+    | 'setEdges'
+    | 'removeNodeRef'
+  >): React.ReactElement => {
     const { t } = useTranslation();
 
     return (
@@ -185,7 +204,6 @@ const AnswerModeSection = memo(
         {nodeParam?.answerType === 'option' && (
           <div className="relative intent-collapse-expand">
             <FLowCollapse
-              isIntentCollapse={true}
               label={
                 <div>
                   {t('workflow.nodes.questionAnswerNode.setOptionContent')}
@@ -210,7 +228,14 @@ const OutputSection = memo(
     canvasesDisabled,
     handleChangeNodeParam,
     updateNodeRef,
-  }): React.ReactElement => {
+  }: NodePropsFor<
+    | 'id'
+    | 'data'
+    | 'nodeParam'
+    | 'canvasesDisabled'
+    | 'handleChangeNodeParam'
+    | 'updateNodeRef'
+  >): React.ReactElement => {
     const { t } = useTranslation();
 
     return (
@@ -226,9 +251,12 @@ const OutputSection = memo(
                 onClick={e => {
                   e?.stopPropagation();
                   handleChangeNodeParam(d => {
-                    d.nodeParam.directAnswer.handleResponse =
-                      !data.nodeParam.directAnswer.handleResponse;
-                    d.outputs = d.nodeParam.directAnswer.handleResponse
+                    const directAnswer =
+                      d.nodeParam.directAnswer ??
+                      (d.nodeParam.directAnswer = {});
+                    directAnswer.handleResponse =
+                      !data.nodeParam.directAnswer?.handleResponse;
+                    d.outputs = directAnswer.handleResponse
                       ? [
                           ...d.outputs.slice(0, 2),
                           {
@@ -240,7 +268,7 @@ const OutputSection = memo(
                         ]
                       : d.outputs.slice(0, 2);
                     updateNodeRef(id);
-                  });
+                  }, undefined);
                 }}
               >
                 <Checkbox checked={nodeParam?.directAnswer?.handleResponse} />
@@ -259,7 +287,7 @@ const OutputSection = memo(
   }
 );
 
-export const QuestionAnswerDetail = memo(props => {
+export const QuestionAnswerDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { handleChangeNodeParam, nodeParam } = useNodeCommon({ id, data });
   const { t } = useTranslation();
@@ -310,7 +338,11 @@ export const QuestionAnswerDetail = memo(props => {
   );
 });
 
-const QuestionContent = ({ question }): React.ReactElement => {
+const QuestionContent = ({
+  question,
+}: {
+  question?: string;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const hasContent = question?.trim();
   return (
@@ -335,7 +367,7 @@ const QuestionContent = ({ question }): React.ReactElement => {
   );
 };
 
-const AnswerType = ({ type }): React.ReactElement => {
+const AnswerType = ({ type }: { type?: string }): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -350,7 +382,15 @@ const AnswerType = ({ type }): React.ReactElement => {
     </>
   );
 };
-const OptionAnswers = ({ id, answers, isConnectable }): React.ReactElement => {
+const OptionAnswers = ({
+  id,
+  answers,
+  isConnectable,
+}: {
+  id: string;
+  answers?: AnswerOption[];
+  isConnectable: boolean;
+}): React.ReactNode => {
   const { t } = useTranslation();
   if (!answers?.length) return null;
 
@@ -383,7 +423,11 @@ const DefaultOptionAnswer = ({
   id,
   answer,
   isConnectable,
-}): React.ReactElement => {
+}: {
+  id: string;
+  answer?: AnswerOption;
+  isConnectable: boolean;
+}): React.ReactElement | null => {
   const { t } = useTranslation();
   if (!answer) return null;
 
@@ -407,38 +451,40 @@ const DefaultOptionAnswer = ({
   );
 };
 
-export const QuestionAnswer = memo(({ id, data }): React.ReactElement => {
-  const { isConnectable } = useNodeCommon({ id, data });
+export const QuestionAnswer = memo(
+  ({ id, data }: NodeComponentProps): React.ReactElement => {
+    const { isConnectable } = useNodeCommon({ id, data });
 
-  const optionAnswer = useMemo(
-    () => data?.nodeParam?.optionAnswer?.filter(item => item.type === 2),
-    [data?.nodeParam?.optionAnswer]
-  );
+    const optionAnswer = useMemo(
+      () => data?.nodeParam?.optionAnswer?.filter(item => item.type === 2),
+      [data?.nodeParam?.optionAnswer]
+    );
 
-  const optionDefaultAnswer = useMemo(
-    () => data?.nodeParam?.optionAnswer?.find(item => item.type === 1),
-    [data?.nodeParam?.optionAnswer]
-  );
+    const optionDefaultAnswer = useMemo(
+      () => data?.nodeParam?.optionAnswer?.find(item => item.type === 1),
+      [data?.nodeParam?.optionAnswer]
+    );
 
-  return (
-    <>
-      <QuestionContent question={data?.nodeParam?.question} />
-      <AnswerType type={data?.nodeParam?.answerType} />
+    return (
+      <>
+        <QuestionContent question={data?.nodeParam?.question} />
+        <AnswerType type={data?.nodeParam?.answerType} />
 
-      {data?.nodeParam?.answerType === 'option' && (
-        <>
-          <OptionAnswers
-            id={id}
-            answers={optionAnswer}
-            isConnectable={isConnectable}
-          />
-          <DefaultOptionAnswer
-            id={id}
-            answer={optionDefaultAnswer}
-            isConnectable={isConnectable}
-          />
-        </>
-      )}
-    </>
-  );
-});
+        {data?.nodeParam?.answerType === 'option' && (
+          <>
+            <OptionAnswers
+              id={id}
+              answers={optionAnswer}
+              isConnectable={isConnectable}
+            />
+            <DefaultOptionAnswer
+              id={id}
+              answer={optionDefaultAnswer}
+              isConnectable={isConnectable}
+            />
+          </>
+        )}
+      </>
+    );
+  }
+);

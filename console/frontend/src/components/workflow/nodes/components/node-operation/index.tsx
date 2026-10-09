@@ -1,3 +1,17 @@
+import type { MenuProps } from 'antd';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
+import type {
+  WorkflowNode,
+  WorkflowDebugNode,
+  WorkflowNodeData,
+} from '@/components/workflow/types/domain';
+import type {
+  RefInput,
+  NodeDebuggerResult,
+  ChatDebuggerNodeData,
+} from '@/components/workflow/types/drawer/chat-debugger';
+type MenuClickEvent = Parameters<NonNullable<MenuProps['onClick']>>[0];
+
 import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
 import { cloneDeep } from 'lodash';
 import { message, Dropdown, Space, Tooltip } from 'antd';
@@ -8,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useMemoizedFn } from 'ahooks';
 import { useLocation } from 'react-router-dom';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import { UseNodeDebuggerReturn } from '@/components/workflow/types/nodes';
+
 import { Icons } from '@/components/workflow/icons';
 import { debugWorkflowNode } from '@/services/flow';
 import { getActiveImportDependencyIssues } from '@/components/workflow/utils/workflow-import-dependencies';
@@ -54,7 +68,7 @@ const useInvalidateNodeDebugOnWorkflowChange = (
   setShowNodeList: (show: boolean) => void,
   setSingleNodeDebuggingInfo: (info: {
     nodeId: string;
-    controller: unknown;
+    controller: AbortController | null;
   }) => void
 ): React.MutableRefObject<number | null> => {
   const activeRequestIdRef = useRef<number | null>(null);
@@ -77,7 +91,11 @@ const useInvalidateNodeDebugOnWorkflowChange = (
   return activeRequestIdRef;
 };
 
-const useNodeDebugger = (id, data, labelInput): UseNodeDebuggerReturn => {
+const useNodeDebugger = (
+  id: string,
+  data: WorkflowNodeData,
+  labelInput: string
+) => {
   const { currentNode } = useNodeCommon({ id, data });
   const { t } = useTranslation();
   const location = useLocation();
@@ -99,7 +117,7 @@ const useNodeDebugger = (id, data, labelInput): UseNodeDebuggerReturn => {
   const checkNode = currentStore(state => state.checkNode);
   const setNode = currentStore(state => state.setNode);
   const [open, setOpen] = useState(false);
-  const [refInputs, setRefInputs] = useState([]);
+  const [refInputs, setRefInputs] = useState<RefInput[]>([]);
   const routeIdentity = `${location.pathname}${location.search}`;
   const workflowIdentity = createWorkflowIdentity({
     ...currentFlow,
@@ -125,111 +143,127 @@ const useNodeDebugger = (id, data, labelInput): UseNodeDebuggerReturn => {
     return true;
   });
 
-  const nodeDebugExect = useMemoizedFn((currentNode, debuggerNode) => {
-    if (blockForImportDependencies()) return;
-    const setDebugState = (
-      status: string,
-      debuggerResult?: UnknownRecord
-    ): void => {
-      setNode(id, latestNode => {
-        if (!latestNode) return latestNode;
-        return mergeNodeDebugState(latestNode, { status, debuggerResult });
-      });
-    };
-
-    const execution = executeNodeDebugRequest({
-      workflowIdentity,
-      flushCurrentFlow,
-      isWorkflowCurrent: identity => {
-        const latestFlow = useFlowsManager.getState().currentFlow;
-        return (
-          currentWorkflowIdentityRef.current === identity &&
-          createWorkflowIdentity({ ...latestFlow, routeIdentity }) === identity
-        );
-      },
-      request: signal => {
-        const manager = useFlowsManager.getState();
-        const latestFlow = manager.currentFlow;
-        const latestNode = manager
-          .getCurrentStore()
-          .getState()
-          .nodes.find(node => node.id === id);
-        if (!latestNode) {
-          throw new Error(t('workflow.promptDebugger.nodeDebugRequestFailed'));
-        }
-        const requestNode = cloneDeep(
-          mergeNodeDebugRequest(latestNode, currentNode, debuggerNode)
-        );
-        return debugWorkflowNode(
-          id,
-          {
-            flowId: latestFlow?.flowId,
-            name: latestFlow?.name,
-            description: latestFlow?.description,
-            data: {
-              nodes: [requestNode],
-              edges: [],
-            },
-          },
-          signal
-        );
-      },
-      onRunning: ({ controller }) => {
-        setDebugState('running');
-        setShowNodeList(false);
-        setSingleNodeDebuggingInfo({ nodeId: id, controller });
-      },
-      onSuccess: (res: unknown) => {
-        const result = asRecord(res) ?? {};
-        const tokenCost = asRecord(result.token_cost);
-        setDebugState('success', {
-          timeCost: result.node_exec_cost,
-          tokenCost: tokenCost?.total_tokens || undefined,
-          input: parseDebugValue(result.input),
-          rawOutput: result.raw_output,
-          output: parseDebugValue(result.output),
+  const nodeDebugExect = useMemoizedFn(
+    (currentNode: WorkflowNode, debuggerNode: WorkflowDebugNode) => {
+      if (blockForImportDependencies()) return;
+      const setDebugState = (
+        status: NonNullable<ChatDebuggerNodeData['status']>,
+        debuggerResult?: Omit<NodeDebuggerResult, 'done'>
+      ): void => {
+        setNode(id, latestNode => {
+          if (!latestNode) return latestNode;
+          return mergeNodeDebugState(latestNode, {
+            status,
+            debuggerResult: debuggerResult
+              ? { ...debuggerResult, done: status !== 'running' }
+              : undefined,
+          });
         });
-      },
-      onFailure: (error: unknown, { controller }) => {
-        if (isNodeDebugCancellation(error, controller.signal)) {
+      };
+
+      const execution = executeNodeDebugRequest({
+        workflowIdentity,
+        flushCurrentFlow,
+        isWorkflowCurrent: identity => {
+          const latestFlow = useFlowsManager.getState().currentFlow;
+          return (
+            currentWorkflowIdentityRef.current === identity &&
+            createWorkflowIdentity({ ...latestFlow, routeIdentity }) ===
+              identity
+          );
+        },
+        request: signal => {
+          const manager = useFlowsManager.getState();
+          const latestFlow = manager.currentFlow;
+          const latestNode = manager
+            .getCurrentStore()
+            .getState()
+            .nodes.find(node => node.id === id);
+          if (!latestNode) {
+            throw new Error(
+              t('workflow.promptDebugger.nodeDebugRequestFailed')
+            );
+          }
+          const requestNode = cloneDeep(
+            mergeNodeDebugRequest(latestNode, currentNode, debuggerNode)
+          );
+          return debugWorkflowNode(
+            id,
+            {
+              flowId: latestFlow?.flowId,
+              name: latestFlow?.name,
+              description: latestFlow?.description,
+              data: {
+                nodes: [requestNode],
+                edges: [],
+              },
+            },
+            signal
+          );
+        },
+        onRunning: ({ controller }) => {
+          setDebugState('running');
+          setShowNodeList(false);
+          setSingleNodeDebuggingInfo({ nodeId: id, controller });
+        },
+        onSuccess: (res: unknown) => {
+          const result = asRecord(res) ?? {};
+          const tokenCost = asRecord(result.token_cost);
+          setDebugState('success', {
+            timeCost:
+              typeof result.node_exec_cost === 'number'
+                ? result.node_exec_cost
+                : undefined,
+            tokenCost:
+              typeof tokenCost?.total_tokens === 'number'
+                ? tokenCost.total_tokens || undefined
+                : undefined,
+            input: parseDebugValue(result.input),
+            rawOutput: result.raw_output,
+            output: parseDebugValue(result.output),
+          });
+        },
+        onFailure: (error: unknown, { controller }) => {
+          if (isNodeDebugCancellation(error, controller.signal)) {
+            setDebugState('cancel', {
+              cancelReason: t('workflow.promptDebugger.nodeDebugCancelled'),
+            });
+          } else {
+            const details = errorDetails(error);
+            const isDependencyGuard = details.code === 8129;
+            setDebugState('failed', {
+              failedReason: isDependencyGuard
+                ? t('workflow.promptDebugger.importDependencyExecutionBlocked')
+                : details.message ||
+                  t('workflow.promptDebugger.nodeDebugRequestFailed'),
+            });
+          }
+        },
+        onFlushFailure: (error: unknown) => {
+          const details = errorDetails(error);
+          const failedReason =
+            details.message ||
+            t('workflow.promptDebugger.nodeDebugRequestFailed');
+          setDebugState('failed', { failedReason });
+          message.error(failedReason);
+        },
+        onSuperseded: () => {
           setDebugState('cancel', {
             cancelReason: t('workflow.promptDebugger.nodeDebugCancelled'),
           });
-        } else {
-          const details = errorDetails(error);
-          const isDependencyGuard = details.code === 8129;
-          setDebugState('failed', {
-            failedReason: isDependencyGuard
-              ? t('workflow.promptDebugger.importDependencyExecutionBlocked')
-              : details.message ||
-                t('workflow.promptDebugger.nodeDebugRequestFailed'),
-          });
-        }
-      },
-      onFlushFailure: (error: unknown) => {
-        const details = errorDetails(error);
-        const failedReason =
-          details.message ||
-          t('workflow.promptDebugger.nodeDebugRequestFailed');
-        setDebugState('failed', { failedReason });
-        message.error(failedReason);
-      },
-      onSuperseded: () => {
-        setDebugState('cancel', {
-          cancelReason: t('workflow.promptDebugger.nodeDebugCancelled'),
-        });
-      },
-      onSettled: ({ requestId }) => {
-        if (activeRequestIdRef.current === requestId) {
-          activeRequestIdRef.current = null;
-        }
-        setShowNodeList(true);
-        setSingleNodeDebuggingInfo({ nodeId: '', controller: null });
-      },
-    });
-    activeRequestIdRef.current = execution.request.requestId;
-    void execution.completion;
-  });
+        },
+        onSettled: ({ requestId }) => {
+          if (activeRequestIdRef.current === requestId) {
+            activeRequestIdRef.current = null;
+          }
+          setShowNodeList(true);
+          setSingleNodeDebuggingInfo({ nodeId: '', controller: null });
+        },
+      });
+      activeRequestIdRef.current = execution.request.requestId;
+      void execution.completion;
+    }
+  );
 
   const handleNodeDebug = useMemoizedFn(() => {
     if (blockForImportDependencies()) return;
@@ -272,15 +306,19 @@ const useNodeDebugger = (id, data, labelInput): UseNodeDebuggerReturn => {
     }
   });
 
-  const remarkStatus = useMemo(() => {
+  const remarkStatus = useMemo<'show' | 'hide' | null>(() => {
     const data = currentNode?.data;
-    if (data && Object.hasOwn(data.nodeParam, 'remark')) {
+    if (
+      data &&
+      Object.prototype.hasOwnProperty.call(data.nodeParam, 'remark')
+    ) {
       return data.nodeParam.remarkVisible ? 'show' : 'hide';
     }
     return null;
   }, [currentNode]);
 
   const remarkClick = (): void => {
+    if (!currentNode) return;
     setNode(id, {
       ...currentNode,
       data: {
@@ -312,7 +350,15 @@ const useNodeDebugger = (id, data, labelInput): UseNodeDebuggerReturn => {
   };
 };
 
-const NodeMenu = ({ id, remarkStatus, remarkClick }): React.ReactElement => {
+const NodeMenu = ({
+  id,
+  remarkStatus,
+  remarkClick,
+}: {
+  id: string;
+  remarkStatus: 'show' | 'hide' | null;
+  remarkClick: () => void;
+}): React.ReactElement => {
   const { t } = useTranslation();
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const deleteNode = currentStore(state => state.deleteNode);
@@ -335,7 +381,7 @@ const NodeMenu = ({ id, remarkStatus, remarkClick }): React.ReactElement => {
           </span>
         </Space>
       ),
-      onClick: (e): void => {
+      onClick: (e: MenuClickEvent): void => {
         e.domEvent.stopPropagation();
         remarkClick();
       },
@@ -350,7 +396,7 @@ const NodeMenu = ({ id, remarkStatus, remarkClick }): React.ReactElement => {
           </span>
         </Space>
       ),
-      onClick: (e): void => {
+      onClick: (e: MenuClickEvent): void => {
         e.domEvent.stopPropagation();
         copyNode(id);
       },
@@ -366,7 +412,7 @@ const NodeMenu = ({ id, remarkStatus, remarkClick }): React.ReactElement => {
         </Space>
       ),
       'data-type': 'delete',
-      onClick: (e): void => {
+      onClick: (e: MenuClickEvent): void => {
         e.domEvent.stopPropagation();
         deleteNode(id);
         setNodeInfoEditDrawerlInfo({
@@ -391,7 +437,11 @@ const NodeMenu = ({ id, remarkStatus, remarkClick }): React.ReactElement => {
   );
 };
 
-function index({ data, id, labelInput = 'labelInput' }): React.ReactElement {
+function index({
+  data,
+  id,
+  labelInput = 'labelInput',
+}: NodeComponentProps & { labelInput?: string }): React.ReactElement {
   const {
     open,
     setOpen,

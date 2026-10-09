@@ -1,3 +1,4 @@
+import type { WorkflowNodeData } from '../domain';
 // Agent Node 相关类型定义
 import React from 'react';
 import { McpTabType, McpOperateType, McpItem } from '../modal/add-mcp';
@@ -12,24 +13,27 @@ export interface AgentDetailProps {
   nodeParam: AgentNodeParam;
 }
 
-export interface AgentNodeData {
+export interface AgentNodeData extends WorkflowNodeData {
   nodeParam: AgentNodeParam;
 }
 
 export interface AgentNodeParam {
   modelConfig?: {
     agentStrategy?: string;
+    domain?: string;
+    api?: string;
   };
   plugin?: {
     toolsList?: ToolItem[];
     mcpServerUrls?: string[];
     mcpServerIds?: string[];
-    tools?: ToolConfig[];
+    tools?: (string | ToolConfig)[];
     knowledge?: KnowledgeConfig[];
     skills?: SkillConfig[];
   };
   enableChatHistoryV2?: {
     isEnabled: boolean;
+    rounds?: number | null;
   };
   instruction?: {
     answer?: string;
@@ -37,7 +41,7 @@ export interface AgentNodeParam {
     query?: string;
     queryErrMsg?: string;
   };
-  maxLoopCount?: number;
+  maxLoopCount?: number | null;
 }
 
 export interface ToolItem {
@@ -45,6 +49,7 @@ export interface ToolItem {
   toolId: string;
   name: string;
   type: 'tool' | 'knowledge' | 'mcp' | 'skill';
+  version?: string;
   icon?: string;
   tag?: string;
   isLatest?: boolean;
@@ -57,7 +62,7 @@ export interface ToolItem {
 
 export interface ToolConfig {
   tool_id: string;
-  version: string;
+  version?: string;
 }
 
 export interface KnowledgeConfig {

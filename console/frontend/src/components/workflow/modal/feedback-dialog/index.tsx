@@ -9,6 +9,7 @@ import {
   message,
   UploadFile,
   UploadProps,
+  FormInstance,
 } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
 import type { RcFile } from 'antd/es/upload';
@@ -38,12 +39,26 @@ interface FeedbackModalProps {
   onCancel: () => void;
 }
 
+interface FeedbackUploadResponse {
+  data?: { downloadLink?: string };
+}
+interface FeedbackValues {
+  description: string;
+  picUrl?: UploadFile<FeedbackUploadResponse>[];
+}
+interface FeedbackFormProps {
+  form: FormInstance<FeedbackValues>;
+  detailMode?: boolean;
+  previewImages: string[];
+  uploadProps: UploadProps<FeedbackUploadResponse>;
+}
+
 const FeedbackForm = ({
   form,
   detailMode,
   previewImages,
   uploadProps,
-}): React.ReactElement => {
+}: FeedbackFormProps): React.ReactElement => {
   return (
     <Form form={form} layout="vertical">
       <Form.Item
@@ -132,10 +147,12 @@ const FeedbackForm = ({
 
 const FeedbackDialog: React.FC<FeedbackModalProps> = props => {
   const { visible, detailMode, flowId, botId, sid, detail, onCancel } = props;
-  const [form] = Form.useForm();
+  const [form] = Form.useForm<FeedbackValues>();
   const [loading, setLoading] = useState(false);
-  const [fileList, setFileList] = useState<UploadFile[]>([]);
-  const [previewImages, setPreviewImages] = useState<unknown[]>([]);
+  const [fileList, setFileList] = useState<
+    UploadFile<FeedbackUploadResponse>[]
+  >([]);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (visible && detailMode) {
@@ -149,23 +166,19 @@ const FeedbackDialog: React.FC<FeedbackModalProps> = props => {
     try {
       const values = await form.validateFields();
       const { description, picUrl } = values;
-      let isUploadFile = false;
-      if (picUrl) {
-        isUploadFile = picUrl.some(file => file.status === 'uploading');
+      const uploadedUrls: string[] = [];
+      for (const file of picUrl ?? []) {
+        const downloadLink = file.response?.data?.downloadLink;
+        if (file.status === 'uploading' || !downloadLink) return;
+        uploadedUrls.push(downloadLink);
       }
-      if (isUploadFile) return;
       setLoading(true);
       const params = {
         flowId,
         botId,
         sid,
         description,
-        picUrl:
-          picUrl && picUrl.length
-            ? picUrl
-                .map((item: UploadFile) => item.response.data.downloadLink)
-                .join(',')
-            : '',
+        picUrl: uploadedUrls.join(','),
       };
       await createFeedback(params);
       setLoading(false);
@@ -200,7 +213,7 @@ const FeedbackDialog: React.FC<FeedbackModalProps> = props => {
     return true;
   };
 
-  const uploadProps: UploadProps = {
+  const uploadProps: UploadProps<FeedbackUploadResponse> = {
     name: 'file',
     action: getFixedUrl('/image/upload'),
     headers: {

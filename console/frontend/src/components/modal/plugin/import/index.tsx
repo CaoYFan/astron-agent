@@ -1,25 +1,33 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
+import type { ReactElement } from 'react';
+import type { ToolImportData } from '@/services/plugin';
 import { Modal, Button, Upload, message, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import uploadAct from '@/assets/imgs/knowledge/icon_zhishi_upload_act.png';
 import close from '@/assets/imgs/workflow/modal-close.png';
 import { importPlugin } from '@/services/plugin';
-import { UploadFile } from 'antd/es/upload/interface';
+import type { RcFile, UploadFile, UploadProps } from 'antd/es/upload/interface';
 
 const { Dragger } = Upload;
-const ImportModal = (props: any) => {
+interface ImportModalProps {
+  visible: boolean;
+  handleCancel: () => void;
+  onImport: (tool: ToolImportData) => void;
+}
+
+const ImportModal = (props: ImportModalProps): ReactElement => {
   const { t } = useTranslation();
   const { visible, handleCancel, onImport } = props;
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileList, setFileList] = useState<RcFile[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  function beforeUpload(file) {
+  function beforeUpload(file: RcFile): boolean {
     const maxSize = 20 * 1024 * 1024;
     if (file.size > maxSize) {
       message.error(t('effectEvaluation.dataset.create.fileSizeExceeded'));
       return false;
     }
-    const extension = file.name.split('.').pop().toLowerCase();
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
     const isLegal = ['json', 'yaml'].includes(extension);
     if (!isLegal) {
       message.error('文件格式错误');
@@ -29,10 +37,12 @@ const ImportModal = (props: any) => {
     return false;
   }
 
-  const handleUpload = () => {
+  const handleUpload = (): void => {
+    const file = fileList[0];
+    if (!file) return;
     setUploading(true);
     importPlugin({
-      file: fileList[0],
+      file,
     })
       .then(res => {
         message.success(t('effectEvaluation.dimensions.import.importSuccess'));
@@ -44,20 +54,17 @@ const ImportModal = (props: any) => {
       });
   };
 
-  const handleClose = () => {
+  const handleClose = (): void => {
     setFileList([]);
     setUploading(false);
   };
-  const uploadProps = {
+  const uploadProps: UploadProps = {
     showUploadList: true,
     accept: '.json,.yaml',
     fileList: fileList,
     maxCount: 1,
     onRemove: (file: UploadFile) => {
-      const index = fileList.indexOf(file);
-      const newFileList = fileList.slice();
-      newFileList.splice(index, 1);
-      setFileList(newFileList);
+      setFileList(previous => previous.filter(item => item.uid !== file.uid));
     },
     beforeUpload,
   };

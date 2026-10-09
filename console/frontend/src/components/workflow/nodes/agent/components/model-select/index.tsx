@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import { Tooltip } from 'antd';
 import { FlowSelect } from '@/components/workflow/ui';
@@ -6,7 +7,7 @@ import useUserStore from '@/store/user-store';
 import { useTranslation } from 'react-i18next';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { handleChangeNodeParam, nodeParam, models } = useNodeCommon({
     id,
     data,
@@ -27,16 +28,22 @@ function index({ id, data }): React.ReactElement {
               models.find(model => model.serviceId === nodeParam?.serviceId)
                 ?.llmId
             }
-            onChange={value => {
+            onChange={(value: number | string) => {
               const currentModel = models.find(
-                model => model.llmId === value || model.serviceId === value
+                model =>
+                  model.llmId === value ||
+                  (typeof value === 'string' && model.serviceId === value)
               );
+              if (!currentModel) return;
               handleChangeNodeParam((data, value) => {
-                data.nodeParam.uid = user?.uid.toString();
+                data.nodeParam.uid = user?.uid?.toString();
                 data.nodeParam.llmId = value.llmId;
-                data.nodeParam.modelConfig.domain = value.domain;
+                data.nodeParam.modelConfig = {
+                  ...data.nodeParam.modelConfig,
+                  domain: value.domain,
+                  api: value.url,
+                };
                 data.nodeParam.serviceId = value.serviceId;
-                data.nodeParam.modelConfig.api = value.url;
                 data.nodeParam.modelId = value.id;
                 data.nodeParam.domain = value.domain;
                 data.nodeParam.url = value.url;

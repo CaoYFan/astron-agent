@@ -2,6 +2,12 @@ import React, { useEffect, memo } from 'react';
 import { cn } from '@/utils';
 import { v4 as uuid } from 'uuid';
 
+interface FlowTextAreaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  adaptiveHeight?: boolean;
+  allowWheel?: boolean;
+}
+
 function FlowTextArea({
   className = '',
   value = '',
@@ -9,7 +15,7 @@ function FlowTextArea({
   allowWheel = true,
   onKeyDown = (): void => {},
   ...reset
-}): React.ReactElement {
+}: FlowTextAreaProps): React.ReactElement {
   const textareaId = 'textarea' + uuid();
 
   useEffect((): (() => void) | void => {

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useMemoizedFn } from 'ahooks';
-import { cloneDeep } from 'lodash';
 import { Button, Input, Select, Spin, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { configListRepos } from '@/services/knowledge';
@@ -12,14 +11,17 @@ import { generateKnowledgeOutput } from '@/components/workflow/utils/reactflowUt
 import {
   KnowledgeItem,
   KnowledgeListItem,
-  NodeItem,
   OrderByType,
   VersionType,
-  useAddKnowledgeProps,
 } from '@/components/workflow/types';
 import { Icons } from '@/components/workflow/icons';
+import { toggleKnowledgeSelection } from '../knowledge-selection';
 
-const useAddKnowledge = (): useAddKnowledgeProps => {
+type KnowledgeListContext = ReturnType<typeof useAddKnowledge> & {
+  id: string | undefined;
+};
+
+const useAddKnowledge = () => {
   const { t } = useTranslation();
   const autoSaveCurrentFlow = useFlowsManager(
     state => state.autoSaveCurrentFlow
@@ -37,15 +39,12 @@ const useAddKnowledge = (): useAddKnowledgeProps => {
   const [tag, setTag] = useState<VersionType | undefined>(undefined);
 
   const id = useMemo(
-    (): string | undefined => knowledgeModalInfo?.nodeId,
+    (): string => knowledgeModalInfo.nodeId ?? '',
     [knowledgeModalInfo]
   );
 
   const repoList = useMemo((): KnowledgeListItem[] => {
-    return (
-      nodes?.find((item: NodeItem) => item.id === id)?.data.nodeParam
-        .repoList || []
-    );
+    return nodes?.find(item => item.id === id)?.data.nodeParam.repoList || [];
   }, [nodes, id]);
 
   const isPro = useMemo(() => {
@@ -64,7 +63,9 @@ const useAddKnowledge = (): useAddKnowledgeProps => {
 
     configListRepos(params)
       .then(data => {
-        setAllData(data.pageData || []);
+        setAllData(
+          (data.pageData ?? []).map(item => ({ ...item, id: String(item.id) }))
+        );
       })
       .finally(() => setLoading(false));
   };
@@ -82,7 +83,7 @@ const useAddKnowledge = (): useAddKnowledgeProps => {
   );
 
   const checkedIds = useMemo(() => {
-    return repoList?.map(item => item?.id) || [];
+    return repoList.map(item => String(item.id)) || [];
   }, [repoList]);
 
   const ragType = useMemo(() => {
@@ -91,58 +92,30 @@ const useAddKnowledge = (): useAddKnowledgeProps => {
 
   const handleKnowledgesChange = useMemoizedFn(
     (knowledge: KnowledgeItem): void => {
+      if (
+        !id ||
+        !knowledge.id ||
+        !(knowledge.coreRepoId || knowledge.outerRepoId)
+      )
+        return;
       autoSaveCurrentFlow();
-      if (isPro) {
-        setNode(id, old => {
-          const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
-            item => item.id === knowledge.id
-          );
-          if (findKnowledgeIndex === -1) {
-            old.data.nodeParam.repoIds.push(
-              knowledge.coreRepoId || knowledge.outerRepoId
-            );
-            old.data.nodeParam.repoList.push(knowledge);
-          } else {
-            old.data.nodeParam.repoIds.splice(findKnowledgeIndex, 1);
-            old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
-          }
-          if (knowledge?.tag === 'CBG-RAG') {
-            old.data.nodeParam.repoType = 2;
-          } else {
-            old.data.nodeParam.repoType = 3;
-          }
-          return {
-            ...cloneDeep(old),
-          };
-        });
-      } else {
-        setNode(id, old => {
-          const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
-            item => item.id === knowledge.id
-          );
-          if (findKnowledgeIndex === -1) {
-            old.data.nodeParam.repoId.push(
-              knowledge.coreRepoId || knowledge.outerRepoId
-            );
-            old.data.nodeParam.repoList.push(knowledge);
-          } else {
-            old.data.nodeParam.repoId.splice(findKnowledgeIndex, 1);
-            old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
-          }
-          old.data.nodeParam.ragType = knowledge?.tag;
-          old.data.outputs = generateKnowledgeOutput(knowledge?.tag);
-          return {
-            ...cloneDeep(old),
-          };
-        });
-      }
+      setNode(id, old => {
+        const updated = toggleKnowledgeSelection(
+          old,
+          knowledge,
+          Boolean(isPro)
+        );
+        if (!isPro)
+          updated.data.outputs = generateKnowledgeOutput(knowledge.tag ?? '');
+        return updated;
+      });
       checkNode(id);
       canPublishSetNot();
     }
   );
 
   const versionList = useMemo(() => {
-    const options = [
+    const options: { label: string; value: VersionType }[] = [
       {
         label: t('workflow.nodes.relatedKnowledgeModal.xingpu'),
         value: 'CBG-RAG',
@@ -179,7 +152,16 @@ const KnowledgeList = ({
   handleKnowledgesChange,
   checkedIds,
   orderBy,
-}): React.ReactElement => {
+}: Pick<
+  KnowledgeListContext,
+  | 'loading'
+  | 'allData'
+  | 'ragType'
+  | 'id'
+  | 'handleKnowledgesChange'
+  | 'checkedIds'
+  | 'orderBy'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const setKnowledgeDetailModalInfo = useFlowsManager(
     state => state.setKnowledgeDetailModalInfo
@@ -222,6 +204,7 @@ const KnowledgeList = ({
               <div
                 className="border border-[#E5E5E5] py-1 px-6 rounded-lg cursor-pointer"
                 onClick={() => {
+                  if (!id) return;
                   setKnowledgeDetailModalInfo({
                     ...item,
                     open: true,
@@ -340,7 +323,7 @@ const AddKnowledge = (): React.ReactElement => {
                 </div>
                 <div className="mt-4 text-sm flex items-center justify-between gap-2.5 pr-6">
                   <div className="flex items-center gap-2.5">
-                    <Select
+                    <Select<VersionType>
                       placeholder={t(
                         'workflow.nodes.relatedKnowledgeModal.versionSelection'
                       )}
@@ -357,7 +340,7 @@ const AddKnowledge = (): React.ReactElement => {
                       options={versionList}
                       allowClear
                     />
-                    <Select
+                    <Select<OrderByType>
                       suffixIcon={
                         <img
                           src={Icons.advancedConfig.formSelect}

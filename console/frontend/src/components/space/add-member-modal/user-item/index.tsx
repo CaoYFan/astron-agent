@@ -5,14 +5,7 @@ import CusCheckBox from '../cus-check-box';
 import styles from './index.module.scss';
 import defaultAvatar from '@/assets/imgs/space/creator.png';
 import { useTranslation } from 'react-i18next';
-interface User {
-  uid: string;
-  username?: string;
-  mobile: string;
-  avatar?: string;
-  status?: number;
-  nickname?: string;
-}
+import type { InviteUser as User } from '../types';
 interface UserItemProps {
   user: User;
   isUserSelected: (userId: string) => boolean;

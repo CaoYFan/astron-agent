@@ -1,3 +1,5 @@
+import type { ToolImportData } from '@/services/plugin';
+import { importedToolDraft } from '../import-contracts';
 import { AvatarType, RecurseData, ToolItem } from '@/types/resource';
 import { useImperativeHandle, useRef } from 'react';
 import { Form, FormInstance, message } from 'antd';
@@ -750,10 +752,10 @@ const useFormDataHandler = (
   setBotIcon: (botIcon: AvatarType) => void,
   setBotColor: (botColor: string) => void
 ): {
-  handleSetFormData: (data: ToolItem) => void;
+  handleSetFormData: (data: Partial<ToolItem>) => void;
 } => {
-  const handleSetFormData = useMemoizedFn((data: ToolItem) => {
-    toolStates.setCurrentToolStatus(data.status);
+  const handleSetFormData = useMemoizedFn((data: Partial<ToolItem>) => {
+    toolStates.setCurrentToolStatus(data.status ?? 0);
     formManagement.baseForm.setFieldsValue({
       name: data?.name,
       description: data?.description,
@@ -772,16 +774,16 @@ const useFormDataHandler = (
       });
       toolStates.setAuthType(2);
     }
-    toolStates.setName(data?.name);
-    toolStates.setDesc(data?.description);
+    toolStates.setName(data.name ?? '');
+    toolStates.setDesc(data.description ?? '');
     toolStates.setInputParamsData(data?.toolRequestInput || []);
     toolStates.setOutputParamsData(data?.toolRequestOutput || []);
     toolStates.setDebuggerParamsData(data?.toolRequestInput || []);
     setBotIcon({
-      name: data?.address,
+      name: data.address ?? '',
       value: data?.icon || '',
     });
-    setBotColor(data?.avatarColor);
+    if (data.avatarColor !== undefined) setBotColor(data.avatarColor);
   });
 
   return {
@@ -800,7 +802,7 @@ const useToolEffects = ({
   setBotIcon,
   setBotColor,
 }: {
-  currentToolInfo: ToolItem;
+  currentToolInfo: Partial<ToolItem>;
   currentToolId: number | string | undefined;
   toolStates: ReturnType<typeof useToolStates>;
   formManagement: ReturnType<typeof useFormManagement>;
@@ -830,7 +832,7 @@ const useToolEffects = ({
 
   useEffect(() => {
     if (currentToolInfo?.id) {
-      const paramsData = JSON.parse(currentToolInfo?.webSchema);
+      const paramsData = JSON.parse(currentToolInfo?.webSchema || '{}');
       formHandler.handleSetFormData({
         ...currentToolInfo,
         toolRequestInput: paramsData?.toolRequestInput,
@@ -962,7 +964,7 @@ const useCreateToolReturn = ({
   checkParmasTable: () => boolean;
   checkDebuggerParmasTable: () => boolean;
   handleDebuggerTool: () => void;
-  updatePlugin: (tool: ToolItem) => void;
+  updatePlugin: (tool: ToolImportData) => void;
   authType: number;
   name: string;
   debuggerJsonData: string;
@@ -1057,12 +1059,13 @@ const usePluginImport = ({
 }: {
   formHandler: ReturnType<typeof useFormDataHandler>;
 }): {
-  updatePlugin: (tool: ToolItem) => void;
+  updatePlugin: (tool: ToolImportData) => void;
 } => {
-  const updatePlugin = useCallback((values: ToolItem): void => {
-    const paramsData = JSON.parse(values?.webSchema);
+  const updatePlugin = useCallback((values: ToolImportData): void => {
+    const draft = importedToolDraft(values);
+    const paramsData = JSON.parse(draft.webSchema || '{}');
     formHandler.handleSetFormData({
-      ...values,
+      ...draft,
       toolRequestInput: paramsData?.toolRequestInput,
       toolRequestOutput: paramsData?.toolRequestOutput,
     });
@@ -1083,7 +1086,7 @@ export const useCreateTool = ({
   setBotColor,
   ref,
 }: {
-  currentToolInfo: ToolItem;
+  currentToolInfo: Partial<ToolItem>;
   handleCreateToolDone: () => void;
   step: number;
   setStep: React.Dispatch<React.SetStateAction<number>>;
@@ -1122,7 +1125,7 @@ export const useCreateTool = ({
   };
   checkDebuggerParmasTable: () => boolean;
   handleDebuggerTool: () => void;
-  updatePlugin: (tool: ToolItem) => void;
+  updatePlugin: (tool: ToolImportData) => void;
   authType: number;
   name: string;
   debuggerJsonData: string;

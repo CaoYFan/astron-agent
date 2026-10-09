@@ -101,6 +101,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@types/dagre": "0.7.54",
     "@types/js-base64": "^3.0.0",
     "@types/lodash": "^4.17.20",
     "@types/node": "^22.13.14",

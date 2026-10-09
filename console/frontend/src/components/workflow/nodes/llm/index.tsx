@@ -1,3 +1,5 @@
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import {
   FlowSelect,
@@ -24,7 +26,9 @@ const PromptSection = ({
   id,
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   const setPromptOptimizeModalInfo = useFlowsManager(
@@ -126,7 +130,9 @@ const MultimediaSection = ({
   id,
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const { inputs, handleChangeInputParam, handleAddInputLine, allowAddInput } =
     useNodeCommon({ id, data });
@@ -192,7 +198,18 @@ const MultimediaSection = ({
                           handleChangeInputParam(
                             input.id,
                             (data, val) => {
-                              data.schema.value.type = val;
+                              data.schema.value =
+                                val === 'literal'
+                                  ? {
+                                      ...data.schema.value,
+                                      type: 'literal',
+                                      content: '',
+                                    }
+                                  : {
+                                      ...data.schema.value,
+                                      type: 'ref',
+                                      content: {},
+                                    };
                               if (val === 'literal') {
                                 data.schema.value.content = '';
                               } else {
@@ -216,7 +233,11 @@ const MultimediaSection = ({
                     {input?.schema?.value?.type === 'literal' ? (
                       <input
                         className="border rounded p-1 w-full"
-                        value={input?.schema?.value?.content || ''}
+                        value={
+                          typeof input.schema.value.content === 'string'
+                            ? input.schema.value.content
+                            : JSON.stringify(input.schema.value.content)
+                        }
                         onChange={e =>
                           handleChangeInputParam(
                             input.id,
@@ -273,7 +294,9 @@ const OutputSection = ({
   id,
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   const { currentNode, isThinkModel } = useNodeCommon({ id, data });
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
@@ -358,7 +381,10 @@ const OutputSection = ({
                       },
                     ];
                   }
-                  if (!checkedNodeOutputData(data?.outputs, currentNode)) {
+                  if (
+                    !currentNode ||
+                    !checkedNodeOutputData(data.outputs, currentNode)
+                  ) {
                     const customOutput = JSON.stringify(
                       { output: '' },
                       null,
@@ -377,8 +403,8 @@ const OutputSection = ({
                     const customOutput = JSON.stringify(
                       generateOrUpdateObject(
                         data?.outputs,
-                        isJSON(data?.retryConfig?.customOutput)
-                          ? JSON.parse(data?.retryConfig?.customOutput)
+                        isJSON(data.retryConfig?.customOutput ?? '')
+                          ? JSON.parse(data.retryConfig?.customOutput ?? 'null')
                           : null
                       ),
                       null,
@@ -403,41 +429,37 @@ const OutputSection = ({
   );
 };
 
-export const LargeModelDetail = memo(({ id, data }): React.ReactElement => {
-  const { handleChangeNodeParam } = useNodeCommon({
-    id,
-    data,
-  });
+export const LargeModelDetail = memo(
+  ({ id, data }: NodeComponentProps): React.ReactElement => {
+    const { handleChangeNodeParam, model } = useNodeCommon({ id, data });
+    const hasMultimodalCapability =
+      model?.multiMode ?? data.nodeParam.multiMode ?? false;
 
-  // Check if any selected model has multimodal capability
-  const models = data?.nodeParam?.model || [];
-  const selectedModel = models.find(model => model?.checked);
-  const hasMultimodalCapability = selectedModel?.multiMode === true;
-
-  return (
-    <div className="p-[14px] pb-[6px]">
-      <div className="bg-[#fff] rounded-lg w-full flex flex-col gap-2.5">
-        <ModelSection id={id} data={data} />
-        <Inputs id={id} data={data} />
-        <PromptSection
-          id={id}
-          data={data}
-          handleChangeNodeParam={handleChangeNodeParam}
-        />
-        {hasMultimodalCapability && (
-          <MultimediaSection
+    return (
+      <div className="p-[14px] pb-[6px]">
+        <div className="bg-[#fff] rounded-lg w-full flex flex-col gap-2.5">
+          <ModelSection id={id} data={data} />
+          <Inputs id={id} data={data} />
+          <PromptSection
             id={id}
             data={data}
             handleChangeNodeParam={handleChangeNodeParam}
           />
-        )}
-        <OutputSection
-          id={id}
-          data={data}
-          handleChangeNodeParam={handleChangeNodeParam}
-        />
-        <ExceptionHandling id={id} data={data} />
+          {hasMultimodalCapability && (
+            <MultimediaSection
+              id={id}
+              data={data}
+              handleChangeNodeParam={handleChangeNodeParam}
+            />
+          )}
+          <OutputSection
+            id={id}
+            data={data}
+            handleChangeNodeParam={handleChangeNodeParam}
+          />
+          <ExceptionHandling id={id} data={data} />
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);

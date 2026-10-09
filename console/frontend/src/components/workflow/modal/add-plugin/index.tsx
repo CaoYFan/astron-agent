@@ -25,16 +25,31 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFlowCommon } from '@/components/workflow/hooks/use-flow-common';
 import {
-  ToolListItem,
   Pagination,
-  BotIcon,
   PluginTabType,
   ToolOperateType,
-  ToolNode,
-  useAddAgentPluginType,
 } from '@/components/workflow/types';
 import { Icons } from '@/components/workflow/icons';
 import { useMemoizedFn } from 'ahooks';
+import type { AvatarType, ToolItem as ToolResource } from '@/types/resource';
+import type {
+  WorkflowInput,
+  ToolParameterNode,
+} from '@/components/workflow/types/domain';
+
+type ToolListItem = ToolResource & { params?: WorkflowInput[] };
+
+type PluginContext = ReturnType<typeof useAddPlugin> & {
+  item: ToolListItem;
+  t: ReturnType<typeof useTranslation>['t'];
+  setToolModalInfo: ReturnType<
+    typeof useFlowsManager.getState
+  >['setToolModalInfo'];
+  resetBeforeAndWillNode: ReturnType<
+    typeof useFlowCommon
+  >['resetBeforeAndWillNode'];
+  handleDeleteModalShow: (event: React.MouseEvent, item: ToolListItem) => void;
+};
 
 const LeftNav = ({
   setToolModalInfo,
@@ -45,7 +60,17 @@ const LeftNav = ({
   setCurrentToolInfo,
   currentTab,
   handleChangeTab,
-}): React.ReactElement => {
+}: Pick<
+  PluginContext,
+  | 'setToolModalInfo'
+  | 'resetBeforeAndWillNode'
+  | 't'
+  | 'setCurrentTab'
+  | 'setToolOperate'
+  | 'setCurrentToolInfo'
+  | 'currentTab'
+  | 'handleChangeTab'
+>): React.ReactElement => {
   return (
     <div className="w-[240px] h-full bg-[#f8faff] px-4 py-6 flow-tool-modal-left">
       <div className="text-lg font-semibold flex items-center gap-2">
@@ -70,6 +95,7 @@ const LeftNav = ({
           setToolOperate('create');
           setCurrentToolInfo({
             id: '',
+            name: '',
           });
         }}
       >
@@ -115,21 +141,30 @@ const ToolItem = ({
   operateId,
   setOperateId,
   handleDeleteModalShow,
-}): React.ReactElement => {
+}: Pick<
+  PluginContext,
+  | 'item'
+  | 'setCurrentToolInfo'
+  | 'setToolOperate'
+  | 'handleAddToolNodeThrottle'
+  | 'currentTab'
+  | 'operateId'
+  | 'setOperateId'
+  | 'handleDeleteModalShow'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
   const renderParamsTooltip = useMemoizedFn((data: ToolListItem) => {
+    const schema: { toolRequestInput?: ToolParameterNode[] } = isJSON(
+      data.webSchema
+    )
+      ? JSON.parse(data.webSchema)
+      : {};
     const params =
       currentTab === 'offical'
-        ? filterTreeNodes(
-            (isJSON(data?.webSchema) &&
-              JSON.parse(data.webSchema)?.toolRequestInput) ||
-              []
-          )
-        : (isJSON(data?.webSchema) &&
-            JSON.parse(data.webSchema)?.toolRequestInput) ||
-          [];
+        ? filterTreeNodes(schema?.toolRequestInput ?? [])
+        : (schema?.toolRequestInput ?? []);
     return (
       <div>
         <div className="text-base font-semibold">{data?.name}</div>
@@ -151,8 +186,8 @@ const ToolItem = ({
       </div>
     );
   });
-  const toolsNode = useMemo((): ToolNode[] => {
-    return nodes?.filter((node: ToolNode) => node?.nodeType === 'plugin');
+  const toolsNode = useMemo(() => {
+    return nodes.filter(node => node.nodeType === 'plugin');
   }, [nodes]);
   return (
     <div
@@ -176,7 +211,7 @@ const ToolItem = ({
             }}
           >
             {item?.avatarColor && (
-              <img src={item?.icon} className="w-[28px] h-[28px]" alt="" />
+              <img src={item.icon ?? ''} className="w-[28px] h-[28px]" alt="" />
             )}
           </span>
           <div className="flex flex-col gap-1 overflow-hidden">
@@ -196,7 +231,7 @@ const ToolItem = ({
               {t('workflow.nodes.toolNode.publishedAt')} {item?.updateTime}
             </p>
           </div>
-          {item?.params?.length > 0 ? (
+          {(item.params?.length ?? 0) > 0 ? (
             <Tooltip
               placement="right"
               title={renderParamsTooltip(item)}
@@ -317,7 +352,28 @@ const PluginList = ({
   handleDeleteModalShow,
   operateId,
   setOperateId,
-}): React.ReactElement => {
+}: Pick<
+  PluginContext,
+  | 'toolRef'
+  | 'loader'
+  | 'currentTab'
+  | 'orderFlag'
+  | 'setOrderFlag'
+  | 'setToolOperate'
+  | 'handleAddToolNodeThrottle'
+  | 'loading'
+  | 'setLoading'
+  | 'hasMore'
+  | 'setPagination'
+  | 'searchValue'
+  | 'dataSource'
+  | 'setDataSource'
+  | 'handleInputChange'
+  | 'setCurrentToolInfo'
+  | 'handleDeleteModalShow'
+  | 'operateId'
+  | 'setOperateId'
+>): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -349,7 +405,7 @@ const PluginList = ({
                   setLoading(true);
                   setDataSource([]);
                   setPagination({
-                    pageNo: 1,
+                    page: 1,
                     pageSize: 20,
                   });
                 }}
@@ -433,7 +489,7 @@ const PluginList = ({
   );
 };
 
-const useAddPlugin = (): useAddAgentPluginType => {
+const useAddPlugin = () => {
   const { handleAddToolNode } = useFlowCommon();
   const loader = useRef<null | HTMLDivElement>(null);
   const loadingRef = useRef<boolean>(false);
@@ -453,8 +509,10 @@ const useAddPlugin = (): useAddAgentPluginType => {
     page: 1,
     pageSize: 20,
   });
-  const [currentToolInfo, setCurrentToolInfo] = useState<ToolListItem>({});
-  const [operateId, setOperateId] = useState<string>('');
+  const [currentToolInfo, setCurrentToolInfo] = useState<Partial<ToolResource>>(
+    { id: '', name: '' }
+  );
+  const [operateId, setOperateId] = useState<ToolResource['id']>('');
 
   const handleInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -474,7 +532,7 @@ const useAddPlugin = (): useAddAgentPluginType => {
       setLoading(true);
       setDataSource(() => []);
       setPagination({
-        pageNo: 1,
+        page: 1,
         pageSize: 20,
       });
       contentRef.current = value;
@@ -489,13 +547,14 @@ const useAddPlugin = (): useAddAgentPluginType => {
     setLoading(true);
     loadingRef.current = true;
     const params = {
-      ...pagination,
+      pageNo: pagination.page,
+      pageSize: pagination.pageSize,
       content: contentRef?.current,
       status: 1,
     };
     listTools(params)
       .then(data => {
-        const newData = data?.pageData.map(item => ({
+        const newData = (data.pageData ?? []).map(item => ({
           ...item,
           params: handleModifyToolUrlParams(
             (isJSON(item?.webSchema) &&
@@ -529,7 +588,7 @@ const useAddPlugin = (): useAddAgentPluginType => {
     };
     listToolSquare(params)
       .then(data => {
-        const newData = data?.pageData.map(item => ({
+        const newData = (data.pageData ?? []).map(item => ({
           ...item,
           params: handleModifyToolUrlParams(
             (isJSON(item?.webSchema) &&
@@ -567,7 +626,7 @@ const useAddPlugin = (): useAddAgentPluginType => {
     setLoading(true);
     setDataSource([]);
     setPagination({
-      pageNo: 1,
+      page: 1,
       pageSize: 20,
     });
     setSearchValue('');
@@ -647,7 +706,7 @@ const AddPlugin = (): React.ReactElement => {
   const setToolModalInfo = useFlowsManager(state => state.setToolModalInfo);
   const [deleteModal, setDeleteModal] = useState<boolean>(false);
   const [step, setStep] = useState<number>(1);
-  const [botIcon, setBotIcon] = useState<BotIcon>({});
+  const [botIcon, setBotIcon] = useState<AvatarType>({ name: '', value: '' });
   const [botColor, setBotColor] = useState<string>('');
 
   useEffect(() => {
@@ -658,7 +717,7 @@ const AddPlugin = (): React.ReactElement => {
 
   useEffect(() => {
     const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && !loadingRef.current) {
+      if (entries[0]?.isIntersecting && !loadingRef.current) {
         setPagination(pagination => ({
           ...pagination,
           page: pagination?.page + 1,
@@ -686,12 +745,14 @@ const AddPlugin = (): React.ReactElement => {
     }
   }, [currentTab, orderFlag, pagination]);
 
-  const handleDeleteModalShow = useMemoizedFn((e, item) => {
-    e.stopPropagation();
-    setOperateId('');
-    setDeleteModal(true);
-    setCurrentToolInfo(item);
-  });
+  const handleDeleteModalShow = useMemoizedFn(
+    (e: React.MouseEvent, item: ToolListItem) => {
+      e.stopPropagation();
+      setOperateId('');
+      setDeleteModal(true);
+      setCurrentToolInfo(item);
+    }
+  );
 
   return (
     <>
@@ -704,13 +765,18 @@ const AddPlugin = (): React.ReactElement => {
               }}
               onClick={e => e.stopPropagation()}
             >
-              {deleteModal && (
-                <DeletePlugin
-                  currentTool={currentToolInfo}
-                  setDeleteModal={setDeleteModal}
-                  getPersonTools={() => handleClearData()}
-                />
-              )}
+              {deleteModal &&
+                currentToolInfo.id !== undefined &&
+                currentToolInfo.name !== undefined && (
+                  <DeletePlugin
+                    currentTool={{
+                      id: currentToolInfo.id,
+                      name: currentToolInfo.name,
+                    }}
+                    setDeleteModal={setDeleteModal}
+                    getPersonTools={() => handleClearData()}
+                  />
+                )}
               <div
                 className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-[#fff] text-second font-medium text-md flex w-full h-full overflow-hidden"
                 onClick={() => setOperateId('')}
@@ -753,6 +819,7 @@ const AddPlugin = (): React.ReactElement => {
                     <>
                       {['create', 'edit']?.includes(toolOperate) && (
                         <CreateTool
+                          showHeader={false}
                           currentToolInfo={currentToolInfo}
                           handleCreateToolDone={() => handleChangeTab('person')}
                           step={step}
@@ -765,6 +832,7 @@ const AddPlugin = (): React.ReactElement => {
                       )}
                       {toolOperate === 'test' && (
                         <ToolDebugger
+                          selectedCard={currentToolInfo}
                           offical={currentTab === 'offical'}
                           currentToolInfo={currentToolInfo}
                           handleClearData={() => handleClearData()}

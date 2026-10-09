@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ReactFlowNode, ReactFlowEdge, ChatStoreType } from '../types';
+import { ChatStoreType } from '../types';
 import {
   initialStatus,
   handleChatTypeChange,
@@ -57,13 +57,13 @@ const useChatStore = create<ChatStoreType>((set, get) => ({
     handleWorkflowDeleteComparisons(get),
   canRunDebugger: (): boolean => canRunDebugger(get),
   setWsMessageStatus: (status: string): void => setWsMessageStatus(status, set),
-  resetNodesAndEdges: (): { nodes: ReactFlowNode[]; edges: ReactFlowEdge[] } =>
+  resetNodesAndEdges: (): ReturnType<ChatStoreType['resetNodesAndEdges']> =>
     resetNodesAndEdges(get),
   setQueue: (number: number): void => setQueue(number, get, set),
   setUserInput: (value: string): void => setUserInput(value, set),
   getTextQueueContent: (): string => getTextQueueContent(get),
   isChatEnd: (): boolean => isChatEnd(get),
-  getChatKey: (): string => getChatKey(get),
+  getChatKey: (): ReturnType<ChatStoreType['getChatKey']> => getChatKey(get),
 }));
 
 export default useChatStore;

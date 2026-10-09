@@ -1,3 +1,9 @@
+import type { KnowledgeItem } from '@/components/workflow/types/modal/add-knowledge';
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+} from '@/components/workflow/types/domain';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep } from 'lodash';
@@ -14,6 +20,9 @@ import parameterSettingsIcon from '@/assets/imgs/workflow/parameter-settings-ico
 const KnowledgeProStrategy = ({
   handleParameterChange,
   data,
+}: {
+  data: WorkflowNodeData;
+  handleParameterChange: (update: (node: WorkflowNode) => void) => void;
 }): React.ReactElement => {
   const { t } = useTranslation();
   const knowledgeProStrategy = useFlowsManager(
@@ -57,7 +66,13 @@ const KnowledgeProStrategy = ({
   );
 };
 
-const AnswerRole = ({ handleParameterChange, data }): React.ReactElement => {
+const AnswerRole = ({
+  handleParameterChange,
+  data,
+}: {
+  data: WorkflowNodeData;
+  handleParameterChange: (update: (node: WorkflowNode) => void) => void;
+}): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <FLowCollapse
@@ -94,7 +109,7 @@ const AnswerRole = ({ handleParameterChange, data }): React.ReactElement => {
   );
 };
 
-export const KnowledgeProDetail = memo(props => {
+export const KnowledgeProDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
@@ -114,20 +129,29 @@ export const KnowledgeProDetail = memo(props => {
   );
 
   const handleKnowledgesChange = useCallback(
-    knowledge => {
+    (knowledge: KnowledgeItem) => {
       autoSaveCurrentFlow();
       setNode(id, old => {
-        const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
+        const repoList =
+          old.data.nodeParam.repoList ?? (old.data.nodeParam.repoList = []);
+        const savedIds = old.data.nodeParam.repoIds;
+        const repoIds = Array.isArray(savedIds)
+          ? savedIds
+          : savedIds
+            ? [savedIds]
+            : [];
+        old.data.nodeParam.repoIds = repoIds;
+        const repoId = knowledge.coreRepoId || knowledge.outerRepoId;
+        if (!repoId) return old;
+        const findKnowledgeIndex = repoList.findIndex(
           item => item.id === knowledge.id
         );
         if (findKnowledgeIndex === -1) {
-          old.data.nodeParam.repoIds.push(
-            knowledge.coreRepoId || knowledge.outerRepoId
-          );
-          old.data.nodeParam.repoList.push(knowledge);
+          repoIds.push(repoId);
+          repoList.push(knowledge);
         } else {
-          old.data.nodeParam.repoIds.splice(findKnowledgeIndex, 1);
-          old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
+          repoIds.splice(findKnowledgeIndex, 1);
+          repoList.splice(findKnowledgeIndex, 1);
         }
         if (knowledge?.tag === 'CBG-RAG') {
           old.data.nodeParam.repoType = 2;
@@ -145,7 +169,7 @@ export const KnowledgeProDetail = memo(props => {
   );
 
   const handleParameterChange = useCallback(
-    fn => {
+    (fn: (node: WorkflowNode) => void) => {
       autoSaveCurrentFlow();
       setNode(id, old => {
         fn(old);

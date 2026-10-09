@@ -215,6 +215,7 @@ const VmsInteractionCmp = forwardRef((props: VmsInteractiveRefProps, ref) => {
           e.stack
         );
       });
+    return undefined;
   };
 
   const disposeVmsInteractiveRef = () => {

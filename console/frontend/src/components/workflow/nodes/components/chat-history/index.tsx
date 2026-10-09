@@ -1,3 +1,11 @@
+import type { DataNode } from 'antd/es/tree';
+interface HistoryTreeNode extends DataNode {
+  label: string;
+  type?: string;
+  schema?: { type: string };
+  children?: HistoryTreeNode[];
+}
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useCallback } from 'react';
 import { FLowTree } from '@/components/workflow/ui';
 import { InputNumber, Tooltip } from 'antd';
@@ -10,7 +18,7 @@ import arrowUp from '@/assets/imgs/chat/arrow_up.png';
 import arrowDown from '@/assets/imgs/chat/arrow_down.png';
 import questionMark from '@/assets/imgs/common/questionmark.png';
 
-function index({ id, data }): React.ReactElement {
+function index({ id, data }: NodeComponentProps): React.ReactElement {
   const { t } = useTranslation();
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -21,7 +29,7 @@ function index({ id, data }): React.ReactElement {
   const setNode = currentStore(state => state.setNode);
 
   const handleChangeNodeParam = useCallback(
-    value => {
+    (value: number | null) => {
       setNode(id, old => {
         if (old?.data?.nodeParam?.enableChatHistoryV2) {
           old.data.nodeParam.enableChatHistoryV2.rounds = value;
@@ -41,7 +49,7 @@ function index({ id, data }): React.ReactElement {
     [id, autoSaveCurrentFlow]
   );
 
-  const titleRender = useCallback(nodeData => {
+  const titleRender = useCallback((nodeData: HistoryTreeNode) => {
     return (
       <div className="flex items-center gap-2">
         <span>{nodeData.label}</span>
@@ -52,7 +60,7 @@ function index({ id, data }): React.ReactElement {
     );
   }, []);
 
-  const treeData = [
+  const treeData: HistoryTreeNode[] = [
     {
       key: '1',
       label: 'history',
@@ -86,7 +94,7 @@ function index({ id, data }): React.ReactElement {
       onKeyDown={e => e.stopPropagation()}
     >
       <div className="w-1/3">
-        <FLowTree
+        <FLowTree<HistoryTreeNode>
           className="flow-output-tree"
           titleRender={titleRender}
           treeData={treeData}

@@ -1,3 +1,4 @@
+import type { WorkflowSnapshot } from '@/components/workflow/types/domain';
 import React, { useEffect, useState, memo } from 'react';
 import { Button, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +20,7 @@ import useFlowStore from '@/components/workflow/store/use-flow-store';
 import chatResultClose from '@/assets/imgs/workflow/chat-result-close.png';
 
 // ========= 组件 =========
-const Index: React.ReactElement = () => {
+const Index = (): React.ReactElement => {
   const { t } = useTranslation();
   const { id } = useParams();
   const location = useLocation();
@@ -64,12 +65,12 @@ const Index: React.ReactElement = () => {
 
   // 设置 nodes 和 edges
   const handleSetNodesAndEdges = useMemoizedFn((originData: string): void => {
-    const data = JSON.parse(originData);
+    const data: WorkflowSnapshot = JSON.parse(originData);
     setNodes(
-      data.nodes?.map((node: unknown) => ({
+      data.nodes.map(node => ({
         ...node,
         type: 'custom',
-        nodeType: node?.id?.split('::')?.[0],
+        nodeType: node.id.split('::')[0] ?? node.nodeType,
         selected: false,
         data: {
           ...node.data,

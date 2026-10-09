@@ -1,15 +1,10 @@
-import React, { useMemo, useRef, useState, useEffect, memo } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, message, Spin } from 'antd';
 import { cloneDeep } from 'lodash';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import useFlowStore from '@/components/workflow/store/use-flow-store';
-import {
-  getProcessedStr,
-  isJSON,
-  isPureText,
-  splitSentencesBasic,
-} from '@/utils';
+import { getProcessedStr, isPureText, splitSentencesBasic } from '@/utils';
 import {
   validateInputJSON,
   generateDefaultInput,
@@ -20,7 +15,10 @@ import ChatContent from './components/chat-content';
 import ChatInput from './components/chat-input';
 import { getPublicResult } from '@/services/common';
 import useChatStore from '@/components/workflow/store/use-chat-store';
-import { UseChatDebuggerContentProps } from '@/components/workflow/types';
+import type { FlowType } from '@/components/workflow/types';
+import type { WorkflowNode } from '@/components/workflow/types/domain';
+import type { ChatStoreType } from '@/components/workflow/types/zustand/chat';
+import { appendChatReply, readConfigObject } from './chat-state';
 import useChat from '@/hooks/use-chat';
 import useChatStores from '@/store/chat-store';
 // 类型导入
@@ -57,6 +55,39 @@ const initInterruptChat: InterruptChatType = {
   needReply: true,
 };
 
+interface VirtualAvatarHandle {
+  instance?: {
+    writeText: (
+      text: string,
+      options?: {
+        tts?: { vcn: string };
+        avatar_dispatch?: { interactive_mode: number };
+      }
+    ) => Promise<unknown>;
+  };
+  dispose: () => void;
+  initAvatar: (options: {
+    sdkAvatarInfo: { avatar_id: string };
+    sdkTTSInfo: { vcn: string };
+  }) => Promise<void>;
+}
+
+type ChatFooterProps = Pick<
+  ChatStoreType,
+  | 'debuggering'
+  | 'setDeleteAllModal'
+  | 'handleResumeChat'
+  | 'resetNodesAndEdges'
+  | 'handleRunDebugger'
+  | 'startNodeParams'
+  | 'interruptChat'
+  | 'userInput'
+> & {
+  trialRun: boolean;
+  t: ReturnType<typeof useTranslation>['t'];
+  clearData: () => void;
+};
+
 const ChatFooter = ({
   trialRun,
   debuggering,
@@ -69,10 +100,7 @@ const ChatFooter = ({
   startNodeParams,
   interruptChat,
   userInput,
-  vmsInteractionCmpRef,
-}: {
-  trialRun: boolean;
-}): React.ReactElement | null => {
+}: ChatFooterProps): React.ReactElement | null => {
   const canRunDebugger = useChatStore(state => state.canRunDebugger);
   const canRunChat = useMemo(
     () => canRunDebugger(),
@@ -140,13 +168,13 @@ const ChatFooter = ({
 };
 
 const useChatDebuggerEffect = (
-  currentFlow,
-  open,
-  startNode,
-  setShowChatDebuggerPage,
-  setStartNodeParams,
-  vmsInteractionCmpRef,
-  vmsInteractiveRefStatus
+  currentFlow: FlowType | undefined,
+  open: boolean,
+  startNode: WorkflowNode | undefined,
+  setShowChatDebuggerPage: (show: boolean) => void,
+  setStartNodeParams: ChatStoreType['setStartNodeParams'],
+  vmsInteractionCmpRef: React.RefObject<VirtualAvatarHandle>,
+  vmsInteractiveRefStatus: string
 ): void => {
   const isMounted = useRef<boolean>(false);
   const historyVersion = useFlowsManager(state => state.historyVersion);
@@ -201,7 +229,7 @@ const useChatDebuggerEffect = (
   }, [currentFlow?.id]);
   useEffect(() => {
     const handleBeforeUnload = (): void => {
-      controllerRef?.current?.abort();
+      useChatStore.getState().controllerRef?.abort();
       handleWorkflowDeleteComparisons();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -209,7 +237,7 @@ const useChatDebuggerEffect = (
       clearNodeStatus();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       handleWorkflowDeleteComparisons();
-      controllerRef?.current?.abort();
+      useChatStore.getState().controllerRef?.abort();
     };
   }, [currentFlow?.flowId]);
   useEffect(() => {
@@ -233,8 +261,11 @@ const useChatDebuggerEffect = (
                 : input?.schema?.type.includes('array')
                   ? '[]'
                   : generateDefaultInput(input?.schema?.type),
-            description: input?.schema?.default,
-            required: input?.required,
+            description:
+              typeof input.schema.default === 'string'
+                ? input.schema.default
+                : undefined,
+            required: input.required ?? false,
             validationSchema:
               input?.schema?.type === 'object' ||
               (input?.schema?.type.includes('array') && !input?.fileType)
@@ -254,7 +285,7 @@ const useChatDebuggerEffect = (
     }
   }, [debuggering]);
   useEffect(() => {
-    if (historyVersion && historyVersionData?.name) {
+    if (historyVersion && historyVersionData?.name && currentFlow?.flowId) {
       const params = {
         flowId: currentFlow?.flowId,
         name: historyVersionData?.name,
@@ -262,7 +293,14 @@ const useChatDebuggerEffect = (
       getPublicResult(params)
         .then(data => {
           setShowChatDebuggerPage(
-            data?.some(item => item?.publishResult === '成功')
+            Array.isArray(data) &&
+              data.some(
+                (item: unknown) =>
+                  typeof item === 'object' &&
+                  item !== null &&
+                  'publishResult' in item &&
+                  item.publishResult === '成功'
+              )
           );
         })
         .catch(error => {
@@ -281,18 +319,17 @@ const useChatDebuggerEffect = (
           setQueue(10);
           setChatList(chatList => {
             chatInfoRef.answer[chatKey] = chatInfoRef.answer[chatKey] + value;
-            chatList[chatList.length - 1][chatKey] =
-              chatList[chatList.length - 1][chatKey] + value;
-            return [...chatList];
+            return appendChatReply(chatList, chatKey, value);
           });
         }
         if (isChatEnd()) {
           setDebuggering(false);
           setChatList(chatList => {
-            if (chatList[chatList.length - 1]) {
-              chatList[chatList.length - 1].showResponse = true;
+            const last = chatList[chatList.length - 1];
+            if (last) {
+              last.showResponse = true;
               if (interruptChat?.type === 'option') {
-                chatList[chatList.length - 1].option = interruptChat?.option;
+                last.option = interruptChat.option ?? undefined;
               }
             }
             return [...chatList];
@@ -327,13 +364,17 @@ const useChatDebuggerEffect = (
       }
     }
 
-    return (): void => clearInterval(timer);
+    return (): void => {
+      if (timer !== null) clearInterval(timer);
+    };
   }, [debuggering, chatList, interruptChat]);
 };
 
 const useChatDebuggerContent = ({
   currentFlow,
-}): UseChatDebuggerContentProps => {
+}: {
+  currentFlow: FlowType | undefined;
+}) => {
   const nodes = useFlowStore(state => state.nodes);
   const errNodes = useFlowsManager(state => state.errNodes);
   const startNode = useMemo(() => {
@@ -343,7 +384,17 @@ const useChatDebuggerContent = ({
     return errNodes?.length === 0;
   }, [errNodes]);
   const xfYunBot = useMemo(() => {
-    return isJSON(currentFlow?.ext) ? JSON.parse(currentFlow?.ext) : {};
+    const config = readConfigObject(currentFlow?.ext);
+    return {
+      chatId:
+        typeof config.chatId === 'string' || typeof config.chatId === 'number'
+          ? config.chatId
+          : undefined,
+      botId:
+        typeof config.botId === 'string' || typeof config.botId === 'number'
+          ? config.botId
+          : undefined,
+    };
   }, [currentFlow]);
   const multiParams = useMemo((): boolean => {
     const startNode = nodes?.find(node => node?.nodeType === 'node-start');
@@ -351,18 +402,24 @@ const useChatDebuggerContent = ({
     let multiParams = true;
     if (
       outputs?.length === 1 ||
-      outputs
-        ?.slice(1)
-        .every((item: { fileType: string }) => item.fileType === 'file')
+      outputs?.slice(1).every(item => item.fileType === 'file')
     ) {
       multiParams = false;
     }
     return multiParams;
   }, [nodes]);
   const talkAgentConfig = useMemo(() => {
-    return isJSON(currentFlow?.flowConfig)
-      ? JSON.parse(currentFlow?.flowConfig)
-      : {};
+    const config = readConfigObject(currentFlow?.flowConfig);
+    return {
+      interactType:
+        typeof config.interactType === 'number' ||
+        typeof config.interactType === 'string'
+          ? config.interactType
+          : undefined,
+      sceneEnable: config.sceneEnable,
+      sceneId: typeof config.sceneId === 'string' ? config.sceneId : undefined,
+      vcn: typeof config.vcn === 'string' ? config.vcn : '',
+    };
   }, [currentFlow?.flowConfig]);
   return {
     startNode,
@@ -419,12 +476,12 @@ export function ChatDebuggerContent({
   const hasVirtualScene = talkAgentConfig?.sceneEnable === 1;
   const [callStatus, setCallStatus] = useState('hangup');
   const [loadingVms, setLoadingVms] = useState<boolean>(false);
-  const vmsInteractionCmpRef = useRef<any>(null);
+  const vmsInteractionCmpRef = useRef<VirtualAvatarHandle>(null);
   const vmsInteractiveRefStatus = useChatStores(
-    (state: any) => state.vmsInteractiveRefStatus
+    state => state.vmsInteractiveRefStatus
   );
   const setVmsInteractiveRefStatus = useChatStores(
-    (state: any) => state.setVmsInteractiveRefStatus
+    state => state.setVmsInteractiveRefStatus
   );
 
   useEffect(() => {
@@ -540,11 +597,8 @@ export function ChatDebuggerContent({
   }, [open]);
 
   useEffect(() => {
-    if (
-      chatList.length > 0 &&
-      chatList[chatList.length - 1].type === 'answer'
-    ) {
-      const responseResult = chatList[chatList.length - 1];
+    const responseResult = chatList[chatList.length - 1];
+    if (responseResult?.type === 'answer') {
       if (responseResult?.showResponse) return;
       if (vmsInteractiveRefStatus === 'init') {
         //送文本到虚拟人，不一定是纯文本
@@ -567,7 +621,7 @@ export function ChatDebuggerContent({
                   },
                 })
                 .then(() => {})
-                .catch((err: any) => {
+                .catch((err: unknown) => {
                   console.error(err);
                   message.error('发送失败，可以打开控制台查看信息');
                 });
@@ -665,12 +719,10 @@ export function ChatDebuggerContent({
                 const params = {
                   chatId: xfYunBot?.chatId,
                   botId: xfYunBot?.botId,
+                  version: historyVersion
+                    ? historyVersionData?.name
+                    : 'debugger',
                 };
-                if (historyVersion) {
-                  params.version = historyVersionData?.name;
-                } else {
-                  params.version = 'debugger';
-                }
                 handleFlowToChat(params);
               }}
             >
@@ -762,7 +814,6 @@ export function ChatDebuggerContent({
           startNodeParams={startNodeParams}
           interruptChat={interruptChat}
           userInput={userInput}
-          vmsInteractionCmpRef={vmsInteractionCmpRef}
         />
       </div>
     </div>

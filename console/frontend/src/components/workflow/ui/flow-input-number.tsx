@@ -1,11 +1,14 @@
 import React, { memo } from 'react';
-import { InputNumber } from 'antd';
+import { InputNumber, type InputNumberProps } from 'antd';
 import { cn } from '@/utils';
 
-function FlowInputNumber({ className = '', ...reset }): React.ReactElement {
+function FlowInputNumber<T extends string | number = number>({
+  className = '',
+  ...reset
+}: InputNumberProps<T>): React.ReactElement {
   return (
     <div onKeyDown={e => e.stopPropagation()}>
-      <InputNumber
+      <InputNumber<T>
         controls={false}
         placeholder="请输入"
         className={cn('flow-input-number', className)}
@@ -15,4 +18,4 @@ function FlowInputNumber({ className = '', ...reset }): React.ReactElement {
   );
 }
 
-export default memo(FlowInputNumber);
+export default memo(FlowInputNumber) as typeof FlowInputNumber;

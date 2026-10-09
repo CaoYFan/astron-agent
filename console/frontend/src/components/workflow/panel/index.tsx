@@ -1,5 +1,6 @@
 import React, { useState, useMemo, memo, useEffect } from 'react';
 import { Panel, MiniMap } from 'reactflow';
+import type { ReactFlowInstance } from 'reactflow';
 import { Tooltip, Popover } from 'antd';
 import { cloneDeep } from 'lodash';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
@@ -8,9 +9,45 @@ import { copyFlowAPI } from '@/services/flow';
 import { useMemoizedFn } from 'ahooks';
 import { useTranslation } from 'react-i18next';
 import { Icons } from '@/components/workflow/icons';
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowEdge,
+  WorkflowSnapshot,
+} from '@/components/workflow/types/domain';
+
+interface FlowPanelProps {
+  reactFlowInstance: ReactFlowInstance<WorkflowNodeData> | null;
+  zoom: number;
+  setZoom: (zoom: number) => void;
+}
+
+type EdgeLineType = 'curve' | 'polyline';
+
+interface FlowControlsProps {
+  positionStartNode: () => void;
+  handleFlowReduction: () => void;
+  handleCopyFlow: () => void;
+  viewAbbreviation: () => void;
+  viewAdaptive: () => void;
+  optimizeLayout: () => void;
+  changeEdgeLine: (edgeType: EdgeLineType) => void;
+  historys: WorkflowSnapshot[];
+  historyVersion: boolean;
+  autonomousMode: boolean;
+  handleSwitchMode: () => void;
+  showNodeRemarks: boolean;
+  handleRemarkNodeVisible: () => void;
+}
+
+interface FlowToolbarProps extends FlowPanelProps, FlowControlsProps {
+  needGuide: boolean;
+  showBeginnerGuide: boolean;
+  setShowBeginnerGuide: (show: boolean) => void;
+}
 
 // 计算布局
-function useFlowLayout(zoom): { optimizeLayout: () => void } {
+function useFlowLayout(zoom: number): { optimizeLayout: () => void } {
   const showIterativeModal = useFlowsManager(state => state.showIterativeModal);
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const nodes = currentStore(state => state.nodes);
@@ -18,7 +55,7 @@ function useFlowLayout(zoom): { optimizeLayout: () => void } {
   const setNodes = currentStore(state => state.setNodes);
   const setEdges = currentStore(state => state.setEdges);
 
-  const getNodeDimensions = useMemoizedFn(id => {
+  const getNodeDimensions = useMemoizedFn((id: string) => {
     const nodeElement = showIterativeModal
       ? document
           .getElementById('iterator-flow-container')
@@ -31,44 +68,46 @@ function useFlowLayout(zoom): { optimizeLayout: () => void } {
     return { width: 172, height: 36 };
   });
 
-  const getLayoutedElements = useMemoizedFn((nodes, edges) => {
-    const dagreGraph = new dagre.graphlib.Graph();
-    dagreGraph.setDefaultEdgeLabel(() => ({}));
-    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
+  const getLayoutedElements = useMemoizedFn(
+    (nodes: WorkflowNode[], edges: WorkflowEdge[]) => {
+      const dagreGraph = new dagre.graphlib.Graph();
+      dagreGraph.setDefaultEdgeLabel(() => ({}));
+      dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 100 });
 
-    nodes
-      .filter(node => showIterativeModal || !node?.data?.parentId)
-      .forEach(node => {
-        const { width, height } = getNodeDimensions(node.id);
-        dagreGraph.setNode(node.id, {
-          width: width || 172,
-          height: height || 36,
+      nodes
+        .filter(node => showIterativeModal || !node?.data?.parentId)
+        .forEach(node => {
+          const { width, height } = getNodeDimensions(node.id);
+          dagreGraph.setNode(node.id, {
+            width: width || 172,
+            height: height || 36,
+          });
         });
+
+      edges.forEach(edge => {
+        dagreGraph.setEdge(edge.source, edge.target);
       });
 
-    edges.forEach(edge => {
-      dagreGraph.setEdge(edge.source, edge.target);
-    });
+      dagre.layout(dagreGraph);
 
-    dagre.layout(dagreGraph);
+      nodes
+        .filter(node => showIterativeModal || !node?.data?.parentId)
+        .forEach(node => {
+          const nodeWithPosition = dagreGraph.node(node.id);
+          const scaleZoom = zoom / 100;
+          node.position = {
+            x:
+              nodeWithPosition.x / scaleZoom -
+              nodeWithPosition.width / scaleZoom / 2,
+            y:
+              nodeWithPosition.y / scaleZoom -
+              nodeWithPosition.height / scaleZoom / 2,
+          };
+        });
 
-    nodes
-      .filter(node => showIterativeModal || !node?.data?.parentId)
-      .forEach(node => {
-        const nodeWithPosition = dagreGraph.node(node.id);
-        const scaleZoom = zoom / 100;
-        node.position = {
-          x:
-            nodeWithPosition.x / scaleZoom -
-            nodeWithPosition.width / scaleZoom / 2,
-          y:
-            nodeWithPosition.y / scaleZoom -
-            nodeWithPosition.height / scaleZoom / 2,
-        };
-      });
-
-    return { newNodes: nodes, newEdges: edges };
-  });
+      return { newNodes: nodes, newEdges: edges };
+    }
+  );
 
   const optimizeLayout = useMemoizedFn(() => {
     const { newNodes, newEdges } = getLayoutedElements(nodes, edges);
@@ -88,9 +127,9 @@ function ModeControls(): React.ReactElement {
   const [hoverControlMode, setHoverControlMode] = useState(false);
 
   useEffect((): void | (() => void) => {
-    function clickOutside(event): void {
+    function clickOutside(event: MouseEvent): void {
       const dom = document.querySelector('.flow-mouser-mode-popover');
-      if (dom && !dom.contains(event.target)) {
+      if (dom && event.target instanceof Node && !dom.contains(event.target)) {
         setShowControlMode(false);
       }
     }
@@ -212,12 +251,13 @@ function ZoomControls({
   zoom,
   setZoom,
   reactFlowInstance,
-}): React.ReactElement {
+}: FlowPanelProps): React.ReactElement {
   return (
     <div className="flex items-center gap-3.5 bg-[#F6F6F7] px-3 py-2 rounded-md">
       <div
         className="flex items-center justify-between w-[15px] h-[15px] cursor-pointer"
         onClick={() => {
+          if (!reactFlowInstance) return;
           let newZoom = zoom / 100 - 0.1;
           newZoom = newZoom <= 0 ? 0.1 : newZoom;
           reactFlowInstance.zoomTo(newZoom);
@@ -232,6 +272,7 @@ function ZoomControls({
         className="w-[15px] h-[16px] cursor-pointer"
         alt=""
         onClick={() => {
+          if (!reactFlowInstance) return;
           let newZoom = zoom / 100 + 0.1;
           newZoom = newZoom >= 2 ? 2 : newZoom;
           reactFlowInstance.zoomTo(newZoom);
@@ -256,7 +297,7 @@ function FlowControls({
   handleSwitchMode,
   showNodeRemarks,
   handleRemarkNodeVisible,
-}): React.ReactElement {
+}: FlowControlsProps): React.ReactElement {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   const currentFlow = useFlowsManager(state => state.currentFlow);
@@ -418,7 +459,7 @@ function FlowToolbar({
   handleSwitchMode,
   showNodeRemarks,
   handleRemarkNodeVisible,
-}): React.ReactElement {
+}: FlowToolbarProps): React.ReactElement {
   const { t } = useTranslation();
   return (
     <Panel position="bottom-center">
@@ -483,7 +524,11 @@ function FlowToolbar({
   );
 }
 
-function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
+function index({
+  reactFlowInstance,
+  zoom,
+  setZoom,
+}: FlowPanelProps): React.ReactElement {
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const historyVersion = useFlowsManager(state => state.historyVersion);
   const currentStore = getCurrentStore();
@@ -510,9 +555,10 @@ function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
         node.id?.startsWith('iteration-node-start') ||
         node.id?.startsWith('loop-node-start')
     );
+    if (!currentNode) return;
     const zoom = 0.8;
-    const xPos = currentNode?.position.x;
-    const yPos = currentNode?.position.y;
+    const xPos = currentNode.position.x;
+    const yPos = currentNode.position.y;
     moveToPosition({ x: -xPos * zoom + 200, y: -yPos * zoom + 200, zoom });
   });
 
@@ -528,7 +574,7 @@ function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
     setZoom(zoom);
   });
 
-  const changeEdgeLine = useMemoizedFn(edgeType => {
+  const changeEdgeLine = useMemoizedFn((edgeType: EdgeLineType) => {
     setEdges(edges =>
       edges?.map(edge => ({
         ...edge,
@@ -541,8 +587,9 @@ function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
   });
 
   const handleFlowReduction = useMemoizedFn(() => {
+    if (!currentFlow?.publishedData) return;
     takeSnapshot();
-    const data = JSON.parse(currentFlow?.publishedData);
+    const data: WorkflowSnapshot = JSON.parse(currentFlow.publishedData);
     setNodes(
       data.nodes?.map(node => ({
         ...node,
@@ -558,7 +605,9 @@ function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
   });
 
   const handleCopyFlow = useMemoizedFn(() => {
-    copyFlowAPI(currentFlow?.id).then(flow => {
+    if (currentFlow?.id == null) return;
+    copyFlowAPI(currentFlow.id).then(flow => {
+      if (flow.id == null) return;
       window.open(
         `${window?.location.origin}/work_flow/${flow.id}/arrange`,
         '_blank'
@@ -575,7 +624,7 @@ function index({ reactFlowInstance, zoom, setZoom }): React.ReactElement {
     setNodes(nodes =>
       nodes?.map(node => {
         const data = cloneDeep(node.data);
-        if (Object.hasOwn(data.nodeParam, 'remark')) {
+        if (Object.prototype.hasOwnProperty.call(data.nodeParam, 'remark')) {
           data.nodeParam.remarkVisible = !showNodeRemarks;
         }
         return {

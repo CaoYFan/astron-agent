@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Switch } from 'antd';
@@ -6,7 +7,7 @@ import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import Inputs from '@/components/workflow/nodes/components/inputs';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
-export const MessageDetail = memo(props => {
+export const MessageDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { handleChangeNodeParam, nodeParam } = useNodeCommon({ id, data });
   const { t } = useTranslation();

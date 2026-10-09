@@ -24,7 +24,6 @@ import {
   ChatContentAdvancedConfig,
   ChatListItemExtended,
   StartNodeType,
-  UseChatContentProps,
 } from '@/components/workflow/types';
 
 // 从统一的图标管理中导入
@@ -37,6 +36,14 @@ const icons = Icons.chatDebugger.chatContent;
 import useChatStore from '@/store/chat-store';
 import { SDKEvents } from '@/utils/avatar-sdk-web_3.1.2.1002/index.js';
 import { isPureText } from '@/utils';
+type ChatContext = ChatContentProps &
+  ReturnType<typeof useChatContent> & {
+    chat: ChatListItemExtended;
+    index: number;
+    currentFlow?: FlowType;
+    t: ReturnType<typeof useTranslation>['t'];
+    setVisible: (visible: boolean) => void;
+  };
 const Prologue = ({
   advancedConfig,
   currentFlow,
@@ -45,7 +52,16 @@ const Prologue = ({
   resetNodesAndEdges,
   handleRunDebugger,
   t,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  | 'advancedConfig'
+  | 'currentFlow'
+  | 'startNodeParams'
+  | 'debuggering'
+  | 'resetNodesAndEdges'
+  | 'handleRunDebugger'
+  | 't'
+>): React.ReactElement => {
   return (
     <>
       {advancedConfig?.prologue?.enabled &&
@@ -106,7 +122,10 @@ const Prologue = ({
   );
 };
 
-const MessageDivider = ({ chat, t }): React.ReactElement => {
+const MessageDivider = ({
+  chat,
+  t,
+}: Pick<ChatContext, 'chat' | 't'>): React.ReactElement => {
   return (
     <div key={chat.id} className="flex items-center justify-center gap-3">
       <img
@@ -126,7 +145,10 @@ const MessageDivider = ({ chat, t }): React.ReactElement => {
   );
 };
 
-const MessageAsk = ({ chat, renderInputElement }): React.ReactElement => {
+const MessageAsk = ({
+  chat,
+  renderInputElement,
+}: Pick<ChatContext, 'chat' | 'renderInputElement'>): React.ReactElement => {
   return (
     <div className="flex items-start gap-4" key={chat.id}>
       <div className="flex items-center gap-4">
@@ -149,14 +171,17 @@ const MessageReplyContent = ({
   index,
   chatList,
   handleResumeChat,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  'chat' | 'debuggering' | 'index' | 'chatList' | 'handleResumeChat'
+>): React.ReactElement => {
   return (
     <>
       {(chat?.messageContent || chat?.reasoningContent || chat?.content) && (
         <div>
           <div>
             <MarkdownRender
-              content={chat?.messageContent}
+              content={chat.messageContent ?? ''}
               isSending={
                 debuggering &&
                 index === chatList?.length - 1 &&
@@ -231,7 +256,18 @@ const MessageActions = ({
   copyData,
   advancedConfig,
   chatType,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  | 'chat'
+  | 'index'
+  | 'chatList'
+  | 'debuggering'
+  | 'setSid'
+  | 'setVisible'
+  | 'copyData'
+  | 'advancedConfig'
+  | 'chatType'
+>): React.ReactElement => {
   const { t } = useTranslation();
   // 为每个消息创建播放状态映射
   const [playingStates, setPlayingStates] = useState<Record<string, boolean>>(
@@ -247,9 +283,13 @@ const MessageActions = ({
     state => state.vmsInteractiveRefStatus
   );
   const setVmsInteractiveRefStatus = useChatStore(
-    (state: any) => state.setVmsInteractiveRefStatus
+    state => state.setVmsInteractiveRefStatus
   );
-  function processStringByChunk(str, chunkSize = 200, handleChunk) {
+  function processStringByChunk(
+    str: string,
+    chunkSize = 200,
+    handleChunk: (chunk: string, index?: number, total?: number) => void
+  ): void {
     // 1. 边界判断：若字符串为空或未传入处理函数，直接返回
     if (!str || typeof handleChunk !== 'function') return;
 
@@ -278,9 +318,10 @@ const MessageActions = ({
   }
   // 播放语音
   const playAudio = useCallback(
-    async (item: any) => {
+    async (item: ChatListItemExtended): Promise<void> => {
+      const content = item.content ?? '';
+      if (!content) return;
       if (chatType === 'vms') {
-        console.log('vmsInteractiveRef', vmsInteractiveRef);
         vmsInteractiveRef?.on(SDKEvents.frame_stop, () => {
           setCurrentPlayingId(null);
         });
@@ -288,14 +329,13 @@ const MessageActions = ({
         if (playingStates[item.id]) {
           setCurrentPlayingId(null);
         } else {
-          console.log('advancedConfig', advancedConfig, item);
-          if (!isPureText(item.content)) {
+          if (!isPureText(content)) {
             message.error(t('chatPage.chatBottom.unSupportRead'));
             return;
           }
           setCurrentPlayingId(item?.id);
-          if (item.content.length >= 2000) {
-            processStringByChunk(item.content, 2000, chunk => {
+          if (content.length >= 2000) {
+            processStringByChunk(content, 2000, chunk => {
               isPureText(chunk) && advancedConfig?.textToSpeech?.vcn_cn
                 ? vmsInteractiveRef
                     ?.writeText(chunk, {
@@ -305,9 +345,16 @@ const MessageActions = ({
                       },
                     })
                     .then(() => {})
-                    .catch((err: any) => {
+                    .catch((err: unknown) => {
+                      const detail =
+                        typeof err === 'object' &&
+                        err !== null &&
+                        'msg' in err &&
+                        typeof err.msg === 'string'
+                          ? err.msg
+                          : '';
                       message.warning(
-                        err?.msg || t('chatPage.chatBottom.feedbackFailed')
+                        detail || t('chatPage.chatBottom.feedbackFailed')
                       );
                     })
                 : vmsInteractiveRef?.writeText(chunk);
@@ -315,15 +362,12 @@ const MessageActions = ({
           } else {
             advancedConfig?.textToSpeech?.vcn_cn
               ? vmsInteractiveRef
-                  ?.writeText(item.content, {
+                  ?.writeText(content, {
                     tts: { vcn: advancedConfig?.textToSpeech?.vcn_cn },
                   })
                   .then(() => {})
-                  .catch((err: any) => {
-                    // console.error(err);
-                    // message.error(err?.msg || t('chatPage.chatBottom.feedbackFailed'));
-                  })
-              : vmsInteractiveRef?.writeText(item.content);
+                  .catch(() => {})
+              : vmsInteractiveRef?.writeText(content);
           }
           setVmsInteractiveRefStatus('init');
         }
@@ -355,13 +399,13 @@ const MessageActions = ({
   );
   useEffect(() => {
     const newPlayingStates: Record<string, boolean> = {};
-    chatList.forEach((chat: any) => {
+    chatList.forEach(chat => {
       newPlayingStates[chat.id] = currentPlayingId === chat.id;
     });
     setPlayingStates(newPlayingStates);
   }, [currentPlayingId, chatList]);
 
-  const handleWindowTabChange = () => {
+  const handleWindowTabChange = (): void => {
     // 判断页面是否从“可见”变为“不可见”（即切换到其他标签页）
     if (document.visibilityState === 'hidden') {
       setCurrentPlayingId(null);
@@ -378,6 +422,8 @@ const MessageActions = ({
   useEffect(() => {
     // 绑定 visibilitychange 事件
     document.addEventListener('visibilitychange', handleWindowTabChange);
+    return () =>
+      document.removeEventListener('visibilitychange', handleWindowTabChange);
   }, []);
   return (
     <>
@@ -397,7 +443,7 @@ const MessageActions = ({
                 ></span>
                 {chatType === 'text' && (
                   <TtsModule
-                    text={chat.content}
+                    text={chat.content ?? ''}
                     language={useLanguage.current}
                     voiceName={advancedConfig?.textToSpeech?.vcn_cn}
                     isPlaying={playingStates[chat.id] || false}
@@ -449,7 +495,19 @@ const MessageSuggestions = ({
   resetNodesAndEdges,
   handleRunDebugger,
   t,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  | 'chat'
+  | 'advancedConfig'
+  | 'index'
+  | 'chatList'
+  | 'debuggering'
+  | 'suggestLoading'
+  | 'suggestProblem'
+  | 'resetNodesAndEdges'
+  | 'handleRunDebugger'
+  | 't'
+>): React.ReactElement => {
   return (
     <>
       {!chat?.showResponse &&
@@ -509,7 +567,19 @@ const MessageRegenerate = ({
   handleResumeChat,
   t,
   handleStopConversation,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  | 'debuggering'
+  | 'index'
+  | 'chatList'
+  | 'setChatList'
+  | 'resetNodesAndEdges'
+  | 'handleRunDebugger'
+  | 'needReply'
+  | 'handleResumeChat'
+  | 't'
+  | 'handleStopConversation'
+>): React.ReactElement => {
   return (
     <>
       {!debuggering && index === chatList.length - 1 && (
@@ -589,7 +659,28 @@ const MessageReply = ({
   handleStopConversation,
   setChatList,
   chatType,
-}): React.ReactElement => {
+}: Pick<
+  ChatContext,
+  | 'chat'
+  | 'currentFlow'
+  | 'debuggering'
+  | 'index'
+  | 'chatList'
+  | 'setSid'
+  | 'setVisible'
+  | 'handleResumeChat'
+  | 't'
+  | 'advancedConfig'
+  | 'copyData'
+  | 'suggestLoading'
+  | 'suggestProblem'
+  | 'resetNodesAndEdges'
+  | 'handleRunDebugger'
+  | 'needReply'
+  | 'handleStopConversation'
+  | 'setChatList'
+  | 'chatType'
+>): React.ReactElement => {
   return (
     <div className="flex flex-col gap-4 group" key={chat?.id}>
       <div className="flex items-start gap-4">
@@ -693,7 +784,10 @@ const MessageReply = ({
   );
 };
 
-const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
+const useChatContent = ({
+  chatList,
+  setChatList,
+}: Pick<ChatContentProps, 'chatList' | 'setChatList'>) => {
   const currentFlow = useFlowsManager(state => state.currentFlow);
   const [sid, setSid] = useState<string | undefined>('');
   const advancedConfig = useMemo<ChatContentAdvancedConfig>(() => {
@@ -715,6 +809,9 @@ const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
           enabled: parsedConfig?.textToSpeech?.enabled ?? true,
           vcn_cn: parsedConfig?.textToSpeech?.vcn_cn || '',
         },
+        speechToText: {
+          enabled: parsedConfig?.speechToText?.enabled ?? false,
+        },
         suggestedQuestionsAfterAnswer: {
           enabled: parsedConfig?.suggestedQuestionsAfterAnswer?.enabled ?? true,
         },
@@ -733,6 +830,8 @@ const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
         feedback: {
           enabled: true,
         },
+        textToSpeech: { enabled: true, vcn_cn: '' },
+        speechToText: { enabled: false },
         suggestedQuestionsAfterAnswer: {
           enabled: true,
         },
@@ -763,6 +862,13 @@ const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
 
   const renderInputElement = useMemoizedFn(
     (chat: ChatListItemExtended, input: StartNodeType): React.ReactElement => {
+      const firstFile = Array.isArray(input.default)
+        ? input.default[0]
+        : undefined;
+      const file =
+        typeof firstFile === 'object' && firstFile !== null
+          ? firstFile
+          : undefined;
       const inputName = chat?.inputs?.length && chat.inputs.length > 1 && (
         <div className="px-4 py-1 bg-[#688fff] rounded-lg text-[#fff] inline-block">
           {input?.name}
@@ -774,11 +880,7 @@ const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
             {inputName}
             {Array.isArray(input?.default) && input.default.length > 0 && (
               <div>
-                <Image
-                  src={(input.default as unknown)?.[0]?.url}
-                  className="mt-2"
-                  alt=""
-                />
+                <Image src={file?.url} className="mt-2" alt="" />
               </div>
             )}
           </div>
@@ -797,9 +899,7 @@ const useChatContent = ({ chatList, setChatList }): UseChatContentProps => {
                     alt=""
                   />
                 </div>
-                <span className="text-[#fff]">
-                  {(input.default as unknown)?.[0]?.name}
-                </span>
+                <span className="text-[#fff]">{file?.name}</span>
               </div>
             )}
           </div>

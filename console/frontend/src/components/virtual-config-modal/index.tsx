@@ -389,10 +389,11 @@ const VirtualConfig: React.FC<HeaderFeedbackModalProps> = ({
   /**
    * AI 生成描述
    */
-  const aiGen = () => {
+  const aiGen = (): void => {
     const cur = form.getFieldValue('botDesc');
     if (!cur) {
-      return message.warning(t('virtualConfig.rulesContent'));
+      message.warning(t('virtualConfig.rulesContent'));
+      return;
     }
     setLoading(true);
     aiGenPrologue({ name: cur })
@@ -1293,7 +1294,6 @@ const VirtualConfig: React.FC<HeaderFeedbackModalProps> = ({
           botIcon={avatarUrl}
           setBotIcon={setAvatarUrl}
           botColor={''}
-          setBotColor={''}
           setShowModal={setShowModal}
         />
       )}

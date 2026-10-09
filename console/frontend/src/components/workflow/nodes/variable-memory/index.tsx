@@ -1,3 +1,19 @@
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type {
+  WorkflowInput,
+  WorkflowNode,
+} from '@/components/workflow/types/domain';
+interface VariableOption {
+  id: string;
+  label: string;
+  value: string;
+  type: string;
+}
+type VariableOutputsProps = NodePropsFor<
+  'id' | 'outputs' | 'handleChangeOutputParam' | 'handleRemoveOutputLine'
+> & { currentNodes: WorkflowNode[] };
+
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep } from 'lodash';
@@ -22,27 +38,29 @@ function Outputs({
   currentNodes,
   handleChangeOutputParam,
   handleRemoveOutputLine,
-}): React.ReactElement {
+}: VariableOutputsProps): React.ReactElement {
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const updateNodeRef = currentStore(state => state.updateNodeRef);
   const checkNode = currentStore(state => state.checkNode);
 
-  const shouldAddParam = useMemoizedFn((input, paramsOptionsArr): boolean => {
-    if (!input?.name) return false;
+  const shouldAddParam = useMemoizedFn(
+    (input: WorkflowInput, paramsOptionsArr: VariableOption[]): boolean => {
+      if (!input?.name) return false;
 
-    const existSame = paramsOptionsArr?.some(
-      option => option?.label === input?.name
-    );
-    if (existSame) return false;
+      const existSame = paramsOptionsArr?.some(
+        option => option?.label === input?.name
+      );
+      if (existSame) return false;
 
-    const schema = input?.schema?.value;
-    if (!schema) return false;
+      const schema = input?.schema?.value;
+      if (!schema) return false;
 
-    if (schema.type === 'literal' && schema.content) return true;
-    if (schema.type === 'ref' && schema.content?.name) return true;
+      if (schema.type === 'literal' && schema.content) return true;
+      if (schema.type === 'ref' && schema.content?.name) return true;
 
-    return false;
-  });
+      return false;
+    }
+  );
 
   const paramsOptions = useMemo(() => {
     const variableMemoryNode = currentNodes.filter(
@@ -73,19 +91,21 @@ function Outputs({
     return paramsOptionsArr;
   }, [currentNodes]);
 
-  const optionRender = useMemoizedFn(nodeData => {
-    let type = nodeData?.data?.type;
-    if (type?.includes('array')) {
-      const arr = nodeData?.data?.type?.split('-');
-      type = `Array<${arr[1]}>`;
+  const optionRender = useMemoizedFn(
+    (nodeData: { data: VariableOption; label?: React.ReactNode }) => {
+      let type = nodeData?.data?.type;
+      if (type?.includes('array')) {
+        const arr = nodeData?.data?.type?.split('-');
+        type = `Array<${arr[1]}>`;
+      }
+      return (
+        <div className="flex items-center gap-2">
+          <span>{nodeData.label}</span>
+          <div className="bg-[#F0F0F0] px-2.5 rounded text-xs">{type}</div>
+        </div>
+      );
     }
-    return (
-      <div className="flex items-center gap-2">
-        <span>{nodeData.label}</span>
-        <div className="bg-[#F0F0F0] px-2.5 rounded text-xs">{type}</div>
-      </div>
-    );
-  });
+  );
 
   return (
     <>
@@ -93,17 +113,21 @@ function Outputs({
         <div className="px-[18px]" key={output.id}>
           <div className="flex items-center gap-3 text-desc">
             <div className="flex-1">
-              <FlowSelect
+              <FlowSelect<string, VariableOption>
                 optionRender={optionRender}
                 options={paramsOptions}
                 value={output?.name}
                 onChange={(value, currentOption) => {
+                  const option = Array.isArray(currentOption)
+                    ? currentOption[0]
+                    : currentOption;
+                  if (!option) return;
                   handleChangeOutputParam(
                     output.id,
                     (data, value) => {
-                      data.refId = currentOption?.id;
+                      data.refId = option.id;
                       data.name = value;
-                      data.schema.type = currentOption?.type;
+                      if (data.schema) data.schema.type = option.type;
                     },
                     value
                   );
@@ -114,7 +138,7 @@ function Outputs({
                 }}
               />
             </div>
-            <div className="w-1/3">{renderType(output.schema.type)}</div>
+            <div className="w-1/3">{renderType(output)}</div>
             {outputs.length > 1 && (
               <img
                 src={remove}
@@ -134,7 +158,7 @@ function Outputs({
   );
 }
 
-export const VariableMemoryDetail = memo(props => {
+export const VariableMemoryDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const {
     handleChangeNodeParam,

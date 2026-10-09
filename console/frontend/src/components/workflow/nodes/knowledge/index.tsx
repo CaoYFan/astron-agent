@@ -1,3 +1,7 @@
+import type { KnowledgeItem } from '@/components/workflow/types/modal/add-knowledge';
+import type { WorkflowNodeData } from '@/components/workflow/types/domain';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep } from 'lodash';
@@ -12,7 +16,9 @@ import parameterSettingsIcon from '@/assets/imgs/workflow/parameter-settings-ico
 import knowledgeListDelete from '@/assets/imgs/workflow/knowledge-list-delete.svg';
 import knowledgeListLook from '@/assets/imgs/workflow/knowledge-list-look.svg';
 
-const KnowledgeCollapseHeader = ({ id }): React.ReactElement => {
+const KnowledgeCollapseHeader = ({
+  id,
+}: NodePropsFor<'id'>): React.ReactElement => {
   const setKnowledgeModalInfo = useFlowsManager(
     state => state.setKnowledgeModalInfo
   );
@@ -72,6 +78,8 @@ export const KnowledgeRepoList = ({
   id,
   data,
   handleKnowledgesChange,
+}: NodeComponentProps & {
+  handleKnowledgesChange: (knowledge: KnowledgeItem) => void;
 }): React.ReactElement => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
@@ -145,7 +153,7 @@ export const KnowledgeRepoList = ({
   );
 };
 
-export const KnowledgeDetail = memo(props => {
+export const KnowledgeDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const autoSaveCurrentFlow = useFlowsManager(
@@ -156,20 +164,29 @@ export const KnowledgeDetail = memo(props => {
   const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
 
   const handleKnowledgesChange = useCallback(
-    knowledge => {
+    (knowledge: KnowledgeItem) => {
       autoSaveCurrentFlow();
       setNode(id, old => {
-        const findKnowledgeIndex = old.data.nodeParam.repoList?.findIndex(
+        const repoList =
+          old.data.nodeParam.repoList ?? (old.data.nodeParam.repoList = []);
+        const savedIds = old.data.nodeParam.repoId;
+        const repoIds = Array.isArray(savedIds)
+          ? savedIds
+          : savedIds
+            ? [savedIds]
+            : [];
+        old.data.nodeParam.repoId = repoIds;
+        const repoId = knowledge.coreRepoId || knowledge.outerRepoId;
+        if (!repoId) return old;
+        const findKnowledgeIndex = repoList.findIndex(
           item => item.id === knowledge.id
         );
         if (findKnowledgeIndex === -1) {
-          old.data.nodeParam.repoId.push(
-            knowledge.coreRepoId || knowledge.outerRepoId
-          );
-          old.data.nodeParam.repoList.push(knowledge);
+          repoIds.push(repoId);
+          repoList.push(knowledge);
         } else {
-          old.data.nodeParam.repoId.splice(findKnowledgeIndex, 1);
-          old.data.nodeParam.repoList.splice(findKnowledgeIndex, 1);
+          repoIds.splice(findKnowledgeIndex, 1);
+          repoList.splice(findKnowledgeIndex, 1);
         }
         return {
           ...cloneDeep(old),
@@ -202,22 +219,30 @@ export const KnowledgeDetail = memo(props => {
   );
 });
 
-export const Knowledge = memo(({ data, repoList }) => {
-  return (
-    <>
-      <span className="text-[#333] text-right">知识库</span>
-      <span className="flex items-center gap-1 flex-wrap">
-        {repoList?.length > 0 ? (
-          repoList?.map(item => (
-            <span key={item.id} className="flex items-center gap-1">
-              <img src={data?.icon} className="w-[12px] h-[12px]" alt="" />
-              <span>{item.name}</span>
-            </span>
-          ))
-        ) : (
-          <span className="text-[#b3b7c6]">未配置知识库</span>
-        )}
-      </span>
-    </>
-  );
-});
+export const Knowledge = memo(
+  ({
+    data,
+    repoList,
+  }: {
+    data: WorkflowNodeData;
+    repoList?: KnowledgeItem[];
+  }) => {
+    return (
+      <>
+        <span className="text-[#333] text-right">知识库</span>
+        <span className="flex items-center gap-1 flex-wrap">
+          {(repoList?.length ?? 0) > 0 ? (
+            repoList?.map(item => (
+              <span key={item.id} className="flex items-center gap-1">
+                <img src={data?.icon} className="w-[12px] h-[12px]" alt="" />
+                <span>{item.name}</span>
+              </span>
+            ))
+          ) : (
+            <span className="text-[#b3b7c6]">未配置知识库</span>
+          )}
+        </span>
+      </>
+    );
+  }
+);

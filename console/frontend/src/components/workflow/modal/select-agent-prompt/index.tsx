@@ -5,22 +5,30 @@ import { Input, Button, Spin } from 'antd';
 import { useDebounce, useMemoizedFn } from 'ahooks';
 import { cloneDeep } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import dayjs from 'dayjs';
-import { getAgentPromptList } from '@/services/prompt';
-import { isJSON } from '@/utils';
-import { useTranslation } from 'react-i18next';
 import {
-  AgentPromptItem,
-  useSelectPromptType,
-} from '@/components/workflow/types';
+  getAgentPromptList,
+  type AgentPromptTemplate,
+} from '@/services/prompt';
+import type { WorkflowInput } from '@/components/workflow/types/domain';
+import { parsePromptModel } from './prompt-model';
+import { useTranslation } from 'react-i18next';
 import { Icons } from '@/components/workflow/icons';
+
+type PromptView = Omit<AgentPromptTemplate, 'id'> & {
+  id: string;
+  modelInfo: ReturnType<typeof parsePromptModel>;
+};
+type PromptContext = ReturnType<typeof useSelectPrompt>;
 
 const PromptList = ({
   loading,
   dataSource,
   currentTemplateId,
   setCurrentTemplateId,
-}): React.ReactElement => {
+}: Pick<
+  PromptContext,
+  'loading' | 'dataSource' | 'currentTemplateId' | 'setCurrentTemplateId'
+>): React.ReactElement => {
   return (
     <>
       {!loading && dataSource?.length > 0 && (
@@ -60,7 +68,10 @@ const PromptDetail = ({
   loading,
   currentTemplateId,
   currentTemplate,
-}): React.ReactElement => {
+}: Pick<
+  PromptContext,
+  'loading' | 'currentTemplateId' | 'currentTemplate'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -101,7 +112,7 @@ const PromptDetail = ({
   );
 };
 
-const useSelectPrompt = (): useSelectPromptType => {
+const useSelectPrompt = () => {
   const setUpdateNodeInputData = useFlowsManager(
     state => state.setUpdateNodeInputData
   );
@@ -111,7 +122,7 @@ const useSelectPrompt = (): useSelectPromptType => {
   const setSelectAgentPromptModalInfo = useFlowsManager(
     state => state.setSelectAgentPromptModalInfo
   );
-  const [dataSource, setDataSource] = useState<AgentPromptItem[]>([]);
+  const [dataSource, setDataSource] = useState<PromptView[]>([]);
   const [value, setValue] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [currentTemplateId, setCurrentTemplateId] = useState<string>('');
@@ -131,31 +142,25 @@ const useSelectPrompt = (): useSelectPromptType => {
     };
 
     getAgentPromptList(params)
-      .then((res: unknown) => {
-        setDataSource(
-          res?.pageData?.map((item: unknown) => ({
-            ...item,
-            publishTime: dayjs(item?.commitTime).format('YYYY-MM-DD HH:mm:ss'),
-            modelInfo: isJSON(item?.adaptationModel)
-              ? JSON.parse(item?.adaptationModel)
-              : {},
-          }))
-        );
-        setCurrentTemplateId(res?.pageData?.[0]?.id);
+      .then(res => {
+        const templates = res.pageData.map(item => ({
+          ...item,
+          id: String(item.id),
+          modelInfo: parsePromptModel(item.adaptationModel),
+        }));
+        setDataSource(templates);
+        setCurrentTemplateId(templates[0]?.id ?? '');
       })
       .finally(() => setLoading(false));
   }, [debouncedValue]);
-  const currentTemplate = useMemo(() => {
-    const res = dataSource?.find(item => item?.id === currentTemplateId);
-    return {
-      ...res,
-      modelInfo: isJSON(res?.adaptationModel || '')
-        ? JSON.parse(res?.adaptationModel || '{}')
-        : {},
-    };
-  }, [dataSource, currentTemplateId]);
+  const currentTemplate = useMemo(
+    () => dataSource.find(item => item.id === currentTemplateId),
+    [dataSource, currentTemplateId]
+  );
   const handleAddTemplateDataToNode = useMemoizedFn(() => {
-    const inputs =
+    const nodeId = selectAgentPromptModalInfo.nodeId;
+    if (!currentTemplate || !nodeId) return;
+    const inputs: WorkflowInput[] =
       currentTemplate?.inputs?.map(item => ({
         schema: {
           type: 'string',
@@ -169,38 +174,44 @@ const useSelectPrompt = (): useSelectPromptType => {
       })) || [];
     const currentInputsName =
       currentTemplate?.inputs?.map(item => item?.name) || [];
-    setNode(selectAgentPromptModalInfo?.nodeId, old => {
+    setNode(nodeId, old => {
       const data = old?.data;
       const value = currentTemplate?.modelInfo;
-      data.nodeParam.instruction.answer = currentTemplate?.characterSettings;
-      data.nodeParam.instruction.reasoning = currentTemplate?.thinkStep;
-      data.nodeParam.instruction.query = currentTemplate?.userQuery;
+      data.nodeParam.instruction = {
+        ...data.nodeParam.instruction,
+        answer: currentTemplate.characterSettings,
+        reasoning: currentTemplate.thinkStep,
+        query: currentTemplate.userQuery,
+      };
       data.inputs = [
         ...old.data.inputs.filter(
           item => !currentInputsName.includes(item?.name)
         ),
         ...inputs,
       ];
-      data.nodeParam.llmId = value?.llmId;
-      data.nodeParam.domain = value?.domain;
-      data.nodeParam.serviceId = value?.serviceId;
-      data.nodeParam.patchId = value?.patchId;
-      data.nodeParam.url = value?.url;
-      data.nodeParam.modelId = value?.id;
-      data.nodeParam.isThink = value?.isThink;
-      data.nodeParam.maxLoopCount = currentTemplate?.maxLoopCount;
-      if (value.provider) {
-        data.nodeParam.source = value.provider;
-      } else if (value.llmSource === 0) {
-        data.nodeParam.source = 'openai';
-      } else {
-        delete data.nodeParam.source;
+      data.nodeParam.maxLoopCount = currentTemplate.maxLoopCount;
+      // Text-only or malformed model metadata must not erase the node's model.
+      if (value) {
+        data.nodeParam.llmId = value.llmId;
+        data.nodeParam.domain = value.domain;
+        data.nodeParam.serviceId = value.serviceId;
+        data.nodeParam.patchId = value.patchId;
+        data.nodeParam.url = value.url;
+        data.nodeParam.modelId = value.id;
+        data.nodeParam.isThink = value.isThink;
+        if (value.provider) {
+          data.nodeParam.source = value.provider;
+        } else if (value.llmSource === 0) {
+          data.nodeParam.source = 'openai';
+        } else {
+          delete data.nodeParam.source;
+        }
       }
       return {
         ...cloneDeep(old),
       };
     });
-    updateNodeRef(selectAgentPromptModalInfo?.nodeId);
+    updateNodeRef(nodeId);
     setSelectAgentPromptModalInfo({
       open: false,
       nodeId: '',
@@ -331,7 +342,7 @@ function SelectAgentPrompt(): React.ReactElement {
                   </Button>
                   <Button
                     type="primary"
-                    disabled={!currentTemplateId}
+                    disabled={loading || !currentTemplate}
                     className="px-[24px]"
                     onClick={handleAddTemplateDataToNode}
                   >

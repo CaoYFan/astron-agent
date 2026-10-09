@@ -22,7 +22,7 @@ function index({
   // 使用受控或非受控逻辑
   const isControlled = propValue !== undefined;
   const value = isControlled ? propValue : internalValue;
-  const handleChange = e => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
     // 启用了首字符限制
     if (restrictFirstChar) {

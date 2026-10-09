@@ -12,9 +12,8 @@ import {
   SingleNodeDebuggingProps,
   RefInput,
   UploadFileItem,
-  UploadResponse,
-  UseSingleNodeDebuggingReturn,
 } from '@/components/workflow/types';
+import type { UploadResponse } from '@/components/workflow/types/drawer/chat-debugger';
 
 // 从统一的图标管理中导入
 import { Icons } from '@/components/workflow/icons';
@@ -23,63 +22,81 @@ import { Icons } from '@/components/workflow/icons';
 const icons = Icons.singleNodeDebugging;
 
 const useSingleNodeDebugging = (
-  id,
-  refInputs,
-  setRefInputs,
-  nodeDebugExect,
-  clearData
-): UseSingleNodeDebuggingReturn => {
+  id: string,
+  refInputs: RefInput[],
+  setRefInputs: SingleNodeDebuggingProps['setRefInputs'],
+  nodeDebugExect: SingleNodeDebuggingProps['nodeDebugExect'],
+  clearData: () => void
+) => {
   const { currentNode } = useNodeCommon({ id });
 
   const handleRun = useMemoizedFn((): void => {
-    const debuggerNode = cloneDeep(currentNode);
-    if (debuggerNode.data?.inputs) {
-      debuggerNode.data.inputs.forEach((input: unknown) => {
+    if (!currentNode) return;
+    const sourceNode = cloneDeep(currentNode);
+    const runtimeInputs = sourceNode.data.inputs
+      ?.map(input => {
         const currentRefInput = refInputs?.find(
           (refInput: RefInput) => refInput.id === input.id
         );
         if (currentRefInput) {
-          input.schema.value.type = 'literal';
-          input.schema.type = currentRefInput.type;
+          let content: unknown = currentRefInput.default;
+          const fileUrls = Array.isArray(currentRefInput.default)
+            ? currentRefInput.default.flatMap(item =>
+                typeof item === 'object' &&
+                item !== null &&
+                'url' in item &&
+                typeof item.url === 'string'
+                  ? [item.url]
+                  : []
+              )
+            : [];
           if (currentRefInput.fileType && currentRefInput.type === 'string') {
-            input.schema.value.content = (
-              currentRefInput.default as UploadFileItem[]
-            )?.[0]?.url;
+            content = fileUrls[0];
           } else if (
             currentRefInput.fileType &&
             currentRefInput.type === 'array-string'
           ) {
-            input.schema.value.content = (
-              currentRefInput.default as UploadFileItem[]
-            )?.map((item: UploadFileItem) => item?.url);
+            content = fileUrls;
           } else if (
             currentRefInput.type === 'object' ||
             currentRefInput.type.includes('array')
           ) {
-            input.schema.value.content =
-              isJSON(currentRefInput.default as string) &&
-              JSON.parse(currentRefInput.default as string);
-          } else {
-            input.schema.value.content = currentRefInput.default;
+            content =
+              typeof currentRefInput.default === 'string' &&
+              isJSON(currentRefInput.default)
+                ? JSON.parse(currentRefInput.default)
+                : currentRefInput.default;
           }
+          return {
+            ...input,
+            schema: {
+              ...input.schema,
+              type: currentRefInput.type,
+              value: { type: 'literal' as const, content },
+            },
+          };
         }
-      });
-      debuggerNode.data.inputs = debuggerNode.data.inputs?.filter(
-        (input: unknown) =>
+        return input;
+      })
+      .filter(
+        input =>
           (typeof input?.schema?.value?.content === 'string' &&
             input?.schema?.value?.content) ||
           typeof input?.schema?.value?.content !== 'string'
       );
-    }
+    const debuggerNode = {
+      ...sourceNode,
+      data: { ...sourceNode.data, inputs: runtimeInputs },
+    };
     nodeDebugExect(currentNode, debuggerNode);
     clearData();
   });
 
-  const handleChangeParam = useMemoizedFn(
-    (
+  const handleChangeParam = useCallback(
+    <Value,>(
       index: number,
-      fn: (data: RefInput, value: unknown) => void,
-      value: unknown
+      fn: (data: RefInput, value: Value) => void,
+      value: Value
     ): void => {
       setRefInputs((old: RefInput[]) => {
         const currentInput = old.find((_: RefInput, i: number) => i === index);
@@ -88,7 +105,8 @@ const useSingleNodeDebugging = (
         }
         return cloneDeep(old);
       });
-    }
+    },
+    [setRefInputs]
   );
 
   const validateParam = useMemoizedFn(
@@ -104,19 +122,30 @@ const useSingleNodeDebugging = (
 
       if (params.fileType) {
         return (
-          (params?.default as UploadFileItem[])?.length > 0 &&
-          (params?.default as UploadFileItem[])?.every(
-            (item: UploadFileItem) => !item?.loading
+          Array.isArray(params.default) &&
+          params.default.length > 0 &&
+          params.default.every(
+            item =>
+              typeof item === 'object' &&
+              item !== null &&
+              'url' in item &&
+              typeof item.url === 'string' &&
+              item.url.length > 0 &&
+              (!('loading' in item) || !item.loading)
           )
         );
       }
 
       if (params.type === 'object' || params.type?.includes('array')) {
-        return isJSON(params?.default as string);
+        return typeof params.default === 'string'
+          ? isJSON(params.default)
+          : typeof params.default === 'object' && params.default !== null;
       }
 
       if (params.type === 'string') {
-        return Boolean((params?.default as string)?.trim());
+        return (
+          typeof params.default === 'string' && params.default.trim().length > 0
+        );
       }
 
       return true;
@@ -125,9 +154,10 @@ const useSingleNodeDebugging = (
 
   const canRunDebugger = useMemo((): boolean => {
     return (
-      refInputs?.every((params: RefInput) =>
+      Boolean(currentNode) &&
+      refInputs.every((params: RefInput) =>
         validateParam(params, currentNode?.nodeType)
-      ) ?? false
+      )
     );
   }, [refInputs, currentNode]);
 
@@ -137,17 +167,17 @@ const useSingleNodeDebugging = (
       index: number,
       fileId: string
     ): void => {
-      const res: UploadResponse = JSON.parse(
-        (event.currentTarget as XMLHttpRequest).responseText
-      );
-      if (res.code === 0) {
+      if (!(event.currentTarget instanceof XMLHttpRequest)) return;
+      const res: UploadResponse = JSON.parse(event.currentTarget.responseText);
+      const uploadedUrl = res.data?.[0];
+      if (res.code === 0 && uploadedUrl) {
         setRefInputs((oldNodeParams: RefInput[]) => {
           const file = (
             oldNodeParams?.[index]?.default as UploadFileItem[]
           )?.find((item: UploadFileItem) => item.id === fileId);
           if (file) {
             file.loading = false;
-            file.url = res?.data?.[0];
+            file.url = uploadedUrl;
           }
           return cloneDeep(oldNodeParams);
         });
@@ -157,15 +187,17 @@ const useSingleNodeDebugging = (
 
   const handleFileUpload = useMemoizedFn(
     (file: File, index: number, multiple: boolean, fileId: string): void => {
-      if (refInputs[index]?.default && multiple) {
-        (refInputs[index].default as UploadFileItem[]).push({
+      const input = refInputs[index];
+      if (!input) return;
+      if (Array.isArray(input.default) && multiple) {
+        input.default.push({
           id: fileId,
           name: file.name,
           size: file.size,
           loading: true,
         });
       } else {
-        refInputs[index].default = [
+        input.default = [
           {
             id: fileId,
             name: file.name,
@@ -182,10 +214,11 @@ const useSingleNodeDebugging = (
     (index: number, fileId: string): void => {
       setRefInputs((oldStartNodeParams: RefInput[]) => {
         const newParams = cloneDeep(oldStartNodeParams);
-        if (newParams[index]?.default) {
-          newParams[index].default = (
-            newParams[index].default as UploadFileItem[]
-          )?.filter((file: UploadFileItem) => fileId !== file?.id);
+        const input = newParams[index];
+        if (input && Array.isArray(input.default)) {
+          input.default = (input.default as UploadFileItem[])?.filter(
+            (file: UploadFileItem) => fileId !== file?.id
+          );
         }
         return newParams;
       });

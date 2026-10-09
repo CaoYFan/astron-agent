@@ -42,7 +42,11 @@ export interface GetKnowledgesResponse {
 export type OrderByType = 'create_time' | 'update_time';
 
 // 版本类型
-export type VersionType = 'AIUI-RAG2' | 'CBG-RAG' | 'SparkDesk-RAG';
+export type VersionType =
+  | 'AIUI-RAG2'
+  | 'CBG-RAG'
+  | 'SparkDesk-RAG'
+  | 'Ragflow-RAG';
 
 // 节点数据接口
 export interface NodeData {

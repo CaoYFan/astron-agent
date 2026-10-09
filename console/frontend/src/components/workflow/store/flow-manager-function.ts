@@ -1,3 +1,14 @@
+import type { Edge } from 'reactflow';
+import type {
+  WorkflowNode,
+  WorkflowNodeCategory,
+  WorkflowNodeData,
+} from '../types/domain';
+import type {
+  FlowsManagerGetter,
+  FlowsManagerSetter,
+  FlowsManagerStoreType,
+} from '../types/zustand/flowsManager';
 import { cloneDeep } from 'lodash';
 import { Node } from 'reactflow';
 import i18next from 'i18next';
@@ -14,7 +25,7 @@ import {
   getFlowModelList,
   canPublishSetNotAPI,
 } from '@/services/flow';
-import { getModelConfigDetail } from '@/services/common';
+
 import { appendVariableAggregationNodeTemplate } from '../utils/variable-aggregation';
 import useFlowStore from './use-flow-store';
 import useIteratorFlowStore from './use-iterator-flow-store';
@@ -59,7 +70,7 @@ export const initialStatus = {
     open: false,
     nodeId: '',
     paramsId: '',
-    data: {},
+    data: undefined,
   }, //Default Value Modal Information
   promptOptimizeModalInfo: {
     open: false,
@@ -128,7 +139,22 @@ export const initialStatus = {
     nodeId: '',
     controller: null, //Node Controller
   }, //Single Node Debug Modal
-};
+} satisfies Partial<FlowsManagerStoreType>;
+
+interface NodeValidationContext {
+  currentCheckNode: WorkflowNode;
+  outgoingEdges: Edge[];
+  errNodes: ErrNodeType[];
+}
+
+interface TraversalContext extends NodeValidationContext {
+  nodes: WorkflowNode[];
+  recStack: Set<string>;
+  visitedNodes: Set<string>;
+  stack: { nodeId: string }[];
+  cycleEdges: Edge[];
+  dfs: () => void;
+}
 
 export interface ModelConfig {
   llmId: string;
@@ -137,30 +163,6 @@ export interface ModelConfig {
   domain: string;
   patchId: string;
   url: string;
-}
-
-interface NodeParam {
-  configs: unknown[];
-  domain: string;
-  serviceId: string;
-  patchId: string;
-  url: string;
-  [key: string]: unknown;
-}
-
-interface NodeData {
-  nodeParam: NodeParam;
-  label: string;
-  icon?: string;
-  inputs?: unknown[];
-  outputs?: unknown[];
-  retryConfig?: {
-    shouldRetry: boolean;
-    errorStrategy: number;
-  };
-  references?: unknown[];
-  childErrList?: ErrNodeType[];
-  parentId?: string;
 }
 
 const intentOrderList = i18next.t('workflow.nodes.flow.intentNumbers', {
@@ -177,15 +179,14 @@ export const getFlowErrorMsg = (
 // Add Text Node Separator Config
 export const addTextNodeConfig = async (
   params: unknown,
-  get
+  get: FlowsManagerGetter
 ): Promise<void> => {
-  const res = await textNodeConfigSaveAPI(params);
+  await textNodeConfigSaveAPI(params);
   const textNodeConfigList = await textNodeConfigListAPI();
   get().setTextNodeConfigList(textNodeConfigList);
-  return res;
 };
 // Set Models
-export const setModels = (appId: string, set): void => {
+export const setModels = (appId: string, set: FlowsManagerSetter): void => {
   set({
     loadingModels: true,
   });
@@ -249,15 +250,15 @@ export const setModels = (appId: string, set): void => {
 // Remove Text Node Separator Config
 export const removeTextNodeConfig = async (
   id: string,
-  get
-): Promise<unknown> => {
+  get: FlowsManagerGetter
+) => {
   await textNodeConfigClearAPI(id);
   const textNodeConfigList = await textNodeConfigListAPI();
   get().setTextNodeConfigList(textNodeConfigList);
   return textNodeConfigList;
 };
 // Get Flow Detail
-export const getFlowDetail = (get): void => {
+export const getFlowDetail = (get: FlowsManagerGetter): void => {
   get().setIsLoading(true);
   getFlowDetailAPI(get().currentFlow?.id || '')
     .then(data => {
@@ -272,7 +273,10 @@ export const getFlowDetail = (get): void => {
     .finally(() => get().setIsLoading(false));
 };
 // Init Flow Data
-export const initFlowData = async (id: string, set): Promise<void> => {
+export const initFlowData = async (
+  id: string,
+  set: FlowsManagerSetter
+): Promise<void> => {
   resetCurrentFlowSave();
   set({
     isLoading: true,
@@ -291,7 +295,7 @@ export const initFlowData = async (id: string, set): Promise<void> => {
     getKnowledgeProStrategyAPI(),
   ]);
   const nodeList = appendVariableAggregationNodeTemplate(nodeTemplate).map(
-    category => ({
+    (category: WorkflowNodeCategory) => ({
       ...category,
       nodes: category.nodes?.map(node =>
         node?.idType === 'loop'
@@ -328,20 +332,20 @@ interface WorkflowSaveParams {
   name?: string;
   description?: string;
   data: {
-    nodes: Node[];
-    edges: unknown[];
+    nodes: Node<WorkflowNodeData>[];
+    edges: Edge[];
   };
 }
 
 interface WorkflowSaveResult {
-  updateTime?: unknown;
-  data?: unknown;
+  updateTime?: string;
+  data?: string;
 }
 
 let currentFlowSaveCoordinator: SaveCoordinator | undefined;
 
 const captureCurrentFlowSnapshot = (
-  get
+  get: FlowsManagerGetter
 ): SaveSnapshot<WorkflowSaveParams> | undefined => {
   const currentFlow = get().currentFlow;
   if (!currentFlow || !shouldPersistWorkflowDraft(get().historyVersion)) {
@@ -372,15 +376,16 @@ const captureCurrentFlowSnapshot = (
   };
 };
 
-const getCurrentFlowSaveCoordinator = (get): SaveCoordinator => {
+const getCurrentFlowSaveCoordinator = (
+  get: FlowsManagerGetter
+): SaveCoordinator => {
   if (!currentFlowSaveCoordinator) {
     currentFlowSaveCoordinator = createSaveCoordinator<
       WorkflowSaveParams,
       WorkflowSaveResult
     >({
       captureSnapshot: () => captureCurrentFlowSnapshot(get),
-      persistSnapshot: params =>
-        saveFlowAPI(params) as Promise<WorkflowSaveResult>,
+      persistSnapshot: params => saveFlowAPI(params),
       isSnapshotCurrent: params => {
         const currentFlow = get().currentFlow;
         return (
@@ -411,13 +416,15 @@ const getCurrentFlowSaveCoordinator = (get): SaveCoordinator => {
 };
 
 // Debounce background saves while preserving a single, ordered write stream.
-export const autoSaveCurrentFlow = (get): void => {
+export const autoSaveCurrentFlow = (get: FlowsManagerGetter): void => {
   if (!shouldPersistWorkflowDraft(get().historyVersion)) return;
   getCurrentFlowSaveCoordinator(get).schedule();
 };
 
 // Persist the latest editable main-canvas snapshot before a server preflight.
-export const flushCurrentFlow = async (get): Promise<void> => {
+export const flushCurrentFlow = async (
+  get: FlowsManagerGetter
+): Promise<void> => {
   if (!shouldPersistWorkflowDraft(get().historyVersion)) return;
   await getCurrentFlowSaveCoordinator(get).flush();
 };
@@ -426,27 +433,31 @@ export const resetCurrentFlowSave = (): void => {
   currentFlowSaveCoordinator?.reset();
 };
 // Can Publish Set Not
-export const canPublishSetNot = (get): void => {
+export const canPublishSetNot = (get: FlowsManagerGetter): void => {
   //改变画布时，如果调试页面打开的话需要关闭进行重新校验
   get().openOperationResult &&
     get().errNodes?.length === 0 &&
     get().setOpenOperationResult(false);
   //改变画布时，将画布可发布态置为false
-  !get().chatMode &&
-    get().canPublish &&
-    canPublishSetNotAPI(get().currentFlow?.id).then(() => {
+  const flowId = get().currentFlow?.id;
+  get().canPublish &&
+    flowId &&
+    canPublishSetNotAPI(flowId).then(() => {
       get().setCanPublish(false);
     });
 };
 // Set Current Store
-export const setCurrentStore = (type: string, set): void => {
+export const setCurrentStore = (
+  type: string,
+  set: FlowsManagerSetter
+): void => {
   set({
     currentStore: type === 'iterator' ? useIteratorFlowStore : useFlowStore,
   });
 };
 // Get Current Store
 export const getCurrentStore = (
-  get
+  get: FlowsManagerGetter
 ): UseBoundStore<StoreApi<FlowStoreType>> => {
   const store = get().currentStore;
   if (!store) {
@@ -455,19 +466,26 @@ export const getCurrentStore = (
   return store;
 };
 // Reset Flows Manager
-export const resetFlowsManager = (set): void => {
+export const resetFlowsManager = (set: FlowsManagerSetter): void => {
   set({
     ...initialStatus,
   });
 };
 // Set Flow Result
-export const setFlowResult = (flowResult, set): void => {
+export const setFlowResult = (
+  flowResult: FlowsManagerStoreType['flowResult'],
+  set: FlowsManagerSetter
+): void => {
   set({
     flowResult,
   });
 };
 // Set Text Node Config List
-export const setTextNodeConfigList = (change, get, set): void => {
+export const setTextNodeConfigList = (
+  change: Parameters<FlowsManagerStoreType['setTextNodeConfigList']>[0],
+  get: FlowsManagerGetter,
+  set: FlowsManagerSetter
+): void => {
   const textNodeConfigList =
     typeof change === 'function' ? change(get().textNodeConfigList) : change;
   set({
@@ -475,7 +493,11 @@ export const setTextNodeConfigList = (change, get, set): void => {
   });
 };
 // Set Agent Strategy
-export const setAgentStrategy = (change, get, set): void => {
+export const setAgentStrategy = (
+  change: Parameters<FlowsManagerStoreType['setAgentStrategy']>[0],
+  get: FlowsManagerGetter,
+  set: FlowsManagerSetter
+): void => {
   const agentStrategy =
     typeof change === 'function' ? change(get().agentStrategy) : change;
   set({
@@ -483,7 +505,11 @@ export const setAgentStrategy = (change, get, set): void => {
   });
 };
 // Set Knowledge Pro Strategy
-export const setKnowledgeProStrategy = (change, get, set): void => {
+export const setKnowledgeProStrategy = (
+  change: Parameters<FlowsManagerStoreType['setKnowledgeProStrategy']>[0],
+  get: FlowsManagerGetter,
+  set: FlowsManagerSetter
+): void => {
   const knowledgeProStrategy =
     typeof change === 'function' ? change(get().knowledgeProStrategy) : change;
   set({
@@ -492,11 +518,20 @@ export const setKnowledgeProStrategy = (change, get, set): void => {
 };
 
 // Add Error Node
-function addErrNode({ errNodes, currentNode, msg }): void {
+function addErrNode({
+  errNodes,
+  currentNode,
+  msg,
+}: {
+  errNodes: ErrNodeType[];
+  currentNode: WorkflowNode;
+  msg: string;
+}): void {
   const isExist = errNodes?.find(node => node?.id === currentNode?.id);
   if (isExist) return;
-  const errNode = {
-    id: currentNode?.id,
+  const errNode: ErrNodeType = {
+    id: currentNode.id,
+    icon: currentNode.data.icon ?? '',
     name: currentNode?.data?.label,
     nodeType: currentNode?.nodeType,
     errorMsg: msg,
@@ -511,6 +546,11 @@ function validateNodeBase({
   variableNodes,
   checkNode,
   errNodes,
+}: {
+  currentCheckNode: WorkflowNode;
+  variableNodes: WorkflowNode[];
+  checkNode: FlowStoreType['checkNode'];
+  errNodes: ErrNodeType[];
 }): void {
   const importIssues = getActiveImportDependencyIssues([currentCheckNode]);
   if (importIssues.length > 0) {
@@ -521,12 +561,7 @@ function validateNodeBase({
     });
     return;
   }
-  if (
-    !checkNode(
-      currentCheckNode.id,
-      variableNodes.filter(node => node.id !== currentCheckNode.id)
-    )
-  ) {
+  if (!checkNode(currentCheckNode.id)) {
     addErrNode({
       errNodes,
       currentNode: currentCheckNode,
@@ -546,8 +581,8 @@ function validateDecisionMakingNode({
   currentCheckNode,
   outgoingEdges,
   errNodes,
-}): void {
-  const intentChains = currentCheckNode?.data?.nodeParam?.intentChains;
+}: NodeValidationContext): void {
+  const intentChains = currentCheckNode.data.nodeParam.intentChains ?? [];
   let flag = true;
   let errorNodeMsg = '';
   intentChains.forEach((intentChain, index) => {
@@ -573,8 +608,8 @@ function validateIfElseNode({
   currentCheckNode,
   outgoingEdges,
   errNodes,
-}): void {
-  const cases = currentCheckNode?.data?.nodeParam?.cases;
+}: NodeValidationContext): void {
+  const cases = currentCheckNode.data.nodeParam.cases ?? [];
   let flag = true;
   let errorNodeMsg = '';
   cases.forEach((intentCase, index) => {
@@ -601,8 +636,8 @@ function validateQuestionAnswerNode({
   currentCheckNode,
   outgoingEdges,
   errNodes,
-}): void {
-  const optionAnswer = currentCheckNode.data.nodeParam.optionAnswer;
+}: NodeValidationContext): void {
+  const optionAnswer = currentCheckNode.data.nodeParam.optionAnswer ?? [];
   let flag = true;
   let errorNodeMsg = '';
   optionAnswer.forEach(option => {
@@ -627,7 +662,7 @@ function validateRetryConfigNode({
   currentCheckNode,
   outgoingEdges,
   errNodes,
-}): void {
+}: NodeValidationContext): void {
   if (
     currentCheckNode?.data?.retryConfig?.shouldRetry &&
     currentCheckNode?.data?.retryConfig?.errorStrategy === 2
@@ -663,7 +698,7 @@ function validateOutgoingEdges({
   errNodes,
   cycleEdges,
   dfs,
-}): void | boolean {
+}: TraversalContext): void | boolean {
   if (currentCheckNode?.nodeType === 'loop-exit') {
     recStack.delete(currentCheckNode.id);
     return;
@@ -680,7 +715,7 @@ function validateOutgoingEdges({
   for (const edge of outgoingEdges) {
     const targetNode = nodes.find(node => node.id === edge.target);
     if (!targetNode) return false;
-    if (!targetNode.data.label.trim()) return false;
+    if (!targetNode.data.label?.trim()) return false;
     if (recStack.has(targetNode.id)) {
       cycleEdges.push(edge);
       addErrNode({
@@ -700,7 +735,15 @@ function validateOutgoingEdges({
 }
 
 // Check Iterator/Loop Node
-function checkIteratorNode({ iteratorId, outerErrNodes, cycleEdges }): void {
+function checkIteratorNode({
+  iteratorId,
+  outerErrNodes,
+  cycleEdges,
+}: {
+  iteratorId: string;
+  outerErrNodes: ErrNodeType[];
+  cycleEdges: Edge[];
+}): void {
   const {
     nodes: allNodes,
     edges: allEdges,
@@ -727,15 +770,20 @@ function checkIteratorNode({ iteratorId, outerErrNodes, cycleEdges }): void {
       : node.nodeType === 'iteration-node-end'
   );
 
-  const visitedNodes = new Set();
-  const errNodes: unknown = [];
-  const stack: unknown[] = [{ nodeId: startNode?.id }];
-  const variableNodes: unknown[] = [];
-  const recStack = new Set();
+  const visitedNodes = new Set<string>();
+  const errNodes: ErrNodeType[] = [];
+  const stack: { nodeId: string }[] = startNode
+    ? [{ nodeId: startNode.id }]
+    : [];
+  const variableNodes: WorkflowNode[] = [];
+  const recStack = new Set<string>();
 
   function dfs(): void {
-    const { nodeId } = stack.pop();
+    const next = stack.pop();
+    if (!next) return;
+    const { nodeId } = next;
     const currentCheckNode = nodes.find(node => node.id === nodeId);
+    if (!currentCheckNode || !nodeId) return;
 
     if (!visitedNodes.has(nodeId)) {
       visitedNodes.add(nodeId);
@@ -744,7 +792,7 @@ function checkIteratorNode({ iteratorId, outerErrNodes, cycleEdges }): void {
 
     validateNodeBase({ currentCheckNode, variableNodes, checkNode, errNodes });
 
-    if (nodeId === endNode.id) {
+    if (nodeId === endNode?.id) {
       recStack.delete(nodeId);
       return;
     }
@@ -804,6 +852,7 @@ function checkIteratorNode({ iteratorId, outerErrNodes, cycleEdges }): void {
     );
     if (currentIteratorNode) currentIteratorNode.childErrList = errNodes;
     else {
+      if (!iteratorNodeInfo) return;
       iteratorNodeInfo.childErrList = errNodes;
       addErrNode({
         errNodes: outerErrNodes,
@@ -815,26 +864,26 @@ function checkIteratorNode({ iteratorId, outerErrNodes, cycleEdges }): void {
 }
 
 // Check Flow
-export function checkFlow(get): boolean {
+export function checkFlow(get: FlowsManagerGetter): boolean {
   const { nodes, edges, checkNode, setEdges } = useFlowStore.getState();
-  const errNodes: unknown[] = [];
-  const cycleEdges: unknown[] = [];
+  const errNodes: ErrNodeType[] = [];
+  const cycleEdges: Edge[] = [];
 
   const startNode = nodes.find(node => node.nodeType === 'node-start');
   const endNode = nodes.find(node => node.nodeType === 'node-end');
-  const visitedNodes = new Set();
-  const recStack = new Set();
-  const stack: { nodeId: string | null }[] = [
-    { nodeId: startNode?.id || null },
-  ];
-  const variableNodes: unknown[] = [];
+  const visitedNodes = new Set<string>();
+  const recStack = new Set<string>();
+  const stack: { nodeId: string }[] = startNode
+    ? [{ nodeId: startNode.id }]
+    : [];
+  const variableNodes: WorkflowNode[] = [];
 
   function dfs(): void {
     const nodeInfo = stack.pop();
     const nodeId = nodeInfo?.nodeId;
     const currentCheckNode = nodes.find(node => node.id === nodeId);
 
-    if (!currentCheckNode) return;
+    if (!currentCheckNode || !nodeId) return;
 
     if (!visitedNodes.has(nodeId)) {
       visitedNodes.add(nodeId);

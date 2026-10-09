@@ -1,3 +1,12 @@
+import { databaseTableOptions } from './types';
+import type {
+  DatabasePropsFor,
+  DatabaseField,
+  DatabaseTableOption,
+} from '@/components/workflow/nodes/database/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
+import type { WorkflowInput } from '@/components/workflow/types/domain';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
 import React, { useState, memo, useEffect } from 'react';
 import {
   FlowSelect,
@@ -17,7 +26,6 @@ import OutputDatabase from './components/OutputDatabase';
 import CasesInputs from './components/CasesInputs';
 import ExceptionHandling from '../components/exception-handling';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import { useDatabaseDetailProps } from '@/components/workflow/types';
 
 import formSelect from '@/assets/imgs/main/icon_nav_dropdown.svg';
 
@@ -31,7 +39,14 @@ const CustomSQLMode = ({
   delayCheckNode,
   allTable,
   handleDbChange,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'id'
+  | 'canvasesDisabled'
+  | 'nodeParam'
+  | 'delayCheckNode'
+  | 'allTable'
+  | 'handleDbChange'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div
@@ -65,7 +80,16 @@ const FormDataMode = ({
   handleSheetChange,
   handleMode,
   modeChange,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'id'
+  | 'canvasesDisabled'
+  | 'nodeParam'
+  | 'delayCheckNode'
+  | 'allTable'
+  | 'handleSheetChange'
+  | 'handleMode'
+  | 'modeChange'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -99,7 +123,9 @@ const FormDataMode = ({
                 {menu}
               </div>
             )}
-            getPopupContainer={triggerNode => triggerNode.parentNode}
+            getPopupContainer={triggerNode =>
+              triggerNode.parentElement ?? document.body
+            }
             onBlur={() => delayCheckNode(id)}
           />
           <div className="text-xs text-[#F74E43]">
@@ -160,13 +186,30 @@ const SelectMode = ({
   nodeParam,
   handleDbChange,
   handleformdata,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  | 'setNode'
+  | 'id'
+  | 'autoSaveCurrentFlow'
+  | 'canPublishSetNot'
+  | 'getFields'
+  | 'allTable'
+  | 'handleCustomSQL'
+  | 'tab'
+  | 'handleMode'
+  | 'modeChange'
+  | 'delayCheckNode'
+  | 'nodeParam'
+  | 'handleDbChange'
+  | 'handleformdata'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
-  const handleSheetChange = (valArray): void => {
+  const handleSheetChange = (valArray: (string | number)[]): void => {
+    const [dbId, tableName] = valArray;
+    if (typeof dbId !== 'string' || typeof tableName !== 'string') return;
     setNode(id, old => {
-      old.data.nodeParam.dbId = valArray[0];
-      old.data.nodeParam.tableName = valArray[1];
+      old.data.nodeParam.dbId = dbId;
+      old.data.nodeParam.tableName = tableName;
       const mode = old.data.nodeParam.mode;
       if (mode === 0) {
         old.data.inputs = [
@@ -200,7 +243,8 @@ const SelectMode = ({
         };
       }
       if (mode === 3) {
-        delete old.data.outputs[2].schema.properties;
+        const output = old.data.outputs[2];
+        if (output) delete output.schema.properties;
         old.data.nodeParam.limit = 50;
       }
       old.data.nodeParam.assignmentList = [];
@@ -212,7 +256,7 @@ const SelectMode = ({
     });
     autoSaveCurrentFlow();
     canPublishSetNot();
-    getFields(allTable, valArray[0], valArray[1]);
+    getFields(allTable, dbId, tableName);
   };
   return (
     <FLowCollapse
@@ -277,7 +321,9 @@ const DatabaseSQLPanel = ({
   delayCheckNode,
   nodeParam,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'delayCheckNode' | 'nodeParam' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -322,7 +368,9 @@ const DatabaseFormPanel = ({
   data,
   fields,
   allFields,
-}): React.ReactElement => {
+}: DatabasePropsFor<
+  'handleMode' | 'id' | 'data' | 'fields' | 'allFields'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <>
@@ -342,7 +390,6 @@ const DatabaseFormPanel = ({
           <CasesInputs
             id={id}
             data={data}
-            fields={fields}
             allFields={allFields}
             key={handleMode}
           >
@@ -364,7 +411,6 @@ const DatabaseFormPanel = ({
           <CasesInputs
             id={id}
             data={data}
-            fields={fields}
             allFields={allFields}
             key={handleMode}
           >
@@ -410,7 +456,6 @@ const DatabaseFormPanel = ({
           <CasesInputs
             id={id}
             data={data}
-            fields={fields}
             allFields={allFields}
             key={handleMode}
           >
@@ -441,15 +486,36 @@ const useDatabaseDetail = ({
   autoSaveCurrentFlow,
   canPublishSetNot,
   updateNodeRef,
-}): useDatabaseDetailProps => {
+}: DatabasePropsFor<
+  | 'id'
+  | 'fields'
+  | 'setFields'
+  | 'setAllFields'
+  | 'data'
+  | 'historyVersion'
+  | 'handleChangeNodeParam'
+  | 'tab'
+  | 'setTab'
+  | 'delayCheckNode'
+  | 'allTable'
+  | 'setHandleMode'
+  | 'setNode'
+  | 'autoSaveCurrentFlow'
+  | 'canPublishSetNot'
+  | 'updateNodeRef'
+>) => {
   const { t } = useTranslation();
-  const getFields = (list, dbId, tableName): void => {
-    const currentTable = list.filter(item => item.value === dbId);
-    if (!currentTable.length) {
+  const getFields = (
+    list: DatabaseTableOption[],
+    dbId: string,
+    tableName: string
+  ): void => {
+    const currentTable = list.find(item => item.value === dbId);
+    if (!currentTable) {
       setFields([]);
       return;
     }
-    const currentSheet = currentTable[0].children.find(
+    const currentSheet = currentTable.children.find(
       item => item.value === tableName
     );
     if (!currentSheet) {
@@ -465,7 +531,7 @@ const useDatabaseDetail = ({
         const filterFields = res.records.filter(field => !field.isSystem);
         const fields = filterFields.map(item => {
           return {
-            id: item.id,
+            id: String(item.id),
             name: item.name,
             required: item.isRequired,
             type: item.type.toLowerCase(),
@@ -475,6 +541,7 @@ const useDatabaseDetail = ({
         setAllFields(
           res.records.map(item => ({
             ...item,
+            id: String(item.id),
             type: item.type.toLowerCase(),
           }))
         );
@@ -485,21 +552,16 @@ const useDatabaseDetail = ({
           !historyVersion
         ) {
           const initInputs = fields
-            .map(item => {
-              if (item.required) {
-                return {
-                  ...item,
-                  schema: {
-                    type: item.type,
-                    value: {
-                      type: 'ref',
-                      content: {},
-                    },
-                  },
-                };
-              }
-            })
-            .filter(Boolean);
+            .filter(item => item.required)
+            .map(
+              (item): WorkflowInput => ({
+                ...item,
+                schema: {
+                  type: item.type,
+                  value: { type: 'ref', content: {} },
+                },
+              })
+            );
           handleChangeNodeParam(
             (data, value) => (data.inputs = value),
             initInputs
@@ -527,7 +589,7 @@ const useDatabaseDetail = ({
     }
   };
 
-  const handleDbChange = (dbId): void => {
+  const handleDbChange = (dbId: string): void => {
     handleChangeNodeParam((data, value) => (data.nodeParam.dbId = value), dbId);
     handleChangeNodeParam(
       (data, value) => (data.nodeParam.tableName = value),
@@ -537,7 +599,7 @@ const useDatabaseDetail = ({
     setAllFields([]);
   };
 
-  const modeChange = (value): void => {
+  const modeChange = (value: number): void => {
     setHandleMode(value);
     setNode(id, old => {
       old.data.nodeParam.mode = value;
@@ -560,8 +622,8 @@ const useDatabaseDetail = ({
         ];
       } else if (value === 1) {
         old.data.inputs = fields
-          .filter((field: unknown) => field.required)
-          .map((it: object) => {
+          .filter(field => field.required)
+          .map((it): WorkflowInput => {
             return {
               ...it,
               schema: {
@@ -591,7 +653,8 @@ const useDatabaseDetail = ({
         };
       }
       if (value === 3) {
-        delete old.data.outputs[2].schema.properties;
+        const output = old.data.outputs[2];
+        if (output) delete output.schema.properties;
         old.data.nodeParam.limit = 50;
       } else {
         delete old.data.nodeParam.limit;
@@ -615,123 +678,114 @@ const useDatabaseDetail = ({
   };
 };
 
-export const DatabaseDetail = memo((props): React.ReactElement => {
-  const { id, data } = props;
-  const { handleChangeNodeParam, nodeParam } = useNodeCommon({ id, data });
-  const { t } = useTranslation();
-  const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
-  const currentStore = getCurrentStore();
-  const autoSaveCurrentFlow = useFlowsManager(
-    state => state.autoSaveCurrentFlow
-  );
-  const delayCheckNode = currentStore(state => state.delayCheckNode);
-  const historyVersion = useFlowsManager(state => state.historyVersion);
-  const setNode = currentStore(state => state.setNode);
-  const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
-  const updateNodeRef = currentStore(state => state.updateNodeRef);
-  const [allFields, setAllFields] = useState([]);
-  const [tab, setTab] = useState(1);
-  const [handleMode, setHandleMode] = useState(0);
-  const [fields, setFields] = useState([]);
-  const [allTable, setAllTable] = useState<unknown>([]);
+export const DatabaseDetail = memo(
+  (props: NodeComponentProps): React.ReactElement => {
+    const { id, data } = props;
+    const { handleChangeNodeParam, nodeParam } = useNodeCommon({ id, data });
+    const { t } = useTranslation();
+    const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
+    const currentStore = getCurrentStore();
+    const autoSaveCurrentFlow = useFlowsManager(
+      state => state.autoSaveCurrentFlow
+    );
+    const delayCheckNode = currentStore(state => state.delayCheckNode);
+    const historyVersion = useFlowsManager(state => state.historyVersion);
+    const setNode = currentStore(state => state.setNode);
+    const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
+    const updateNodeRef = currentStore(state => state.updateNodeRef);
+    const [allFields, setAllFields] = useState<DatabaseField[]>([]);
+    const [tab, setTab] = useState(1);
+    const [handleMode, setHandleMode] = useState(0);
+    const [fields, setFields] = useState<DatabaseField[]>([]);
+    const [allTable, setAllTable] = useState<DatabaseTableOption[]>([]);
 
-  const {
-    handleCustomSQL,
-    handleDbChange,
-    handleformdata,
-    modeChange,
-    getFields,
-  } = useDatabaseDetail({
-    id,
-    fields,
-    setFields,
-    setAllFields,
-    data,
-    historyVersion,
-    handleChangeNodeParam,
-    tab,
-    setTab,
-    delayCheckNode,
-    allTable,
-    setHandleMode,
-    setNode,
-    autoSaveCurrentFlow,
-    canPublishSetNot,
-    updateNodeRef,
-  });
-
-  useEffect(() => {
-    allTableList().then(list => {
-      const arr = list.map(item => {
-        item.children = item.children
-          ? item.children.map(inner => {
-              inner.id = inner.value;
-              inner.value = inner.label;
-              return inner;
-            })
-          : null;
-        return item;
-      });
-      setAllTable(arr);
-      if (data?.nodeParam?.dbId && data?.nodeParam?.tableName) {
-        getFields(arr, data.nodeParam.dbId, data.nodeParam.tableName);
-      }
+    const {
+      handleCustomSQL,
+      handleDbChange,
+      handleformdata,
+      modeChange,
+      getFields,
+    } = useDatabaseDetail({
+      id,
+      fields,
+      setFields,
+      setAllFields,
+      data,
+      historyVersion,
+      handleChangeNodeParam,
+      tab,
+      setTab,
+      delayCheckNode,
+      allTable,
+      setHandleMode,
+      setNode,
+      autoSaveCurrentFlow,
+      canPublishSetNot,
+      updateNodeRef,
     });
-  }, []);
 
-  useEffect(() => {
-    setTab(data?.nodeParam?.mode > 0 ? 2 : 1);
-    setHandleMode(data?.nodeParam?.mode || 0);
-  }, [data]);
+    useEffect(() => {
+      allTableList().then(list => {
+        const arr = databaseTableOptions(list);
+        setAllTable(arr);
+        if (data?.nodeParam?.dbId && data?.nodeParam?.tableName) {
+          getFields(arr, data.nodeParam.dbId, data.nodeParam.tableName);
+        }
+      });
+    }, []);
 
-  return (
-    <div className={styles.database}>
-      <div className="p-[14px] pb-[6px]">
-        <SelectMode
-          setNode={setNode}
-          id={id}
-          autoSaveCurrentFlow={autoSaveCurrentFlow}
-          canPublishSetNot={canPublishSetNot}
-          getFields={getFields}
-          allTable={allTable}
-          handleCustomSQL={handleCustomSQL}
-          tab={tab}
-          handleMode={handleMode}
-          modeChange={modeChange}
-          delayCheckNode={delayCheckNode}
-          nodeParam={nodeParam}
-          fields={fields}
-          allFields={allFields}
-          handleDbChange={handleDbChange}
-          handleformdata={handleformdata}
-        />
-        <div className="bg-[#fff] rounded-lg w-full flex flex-col gap-2.5">
-          {tab == 1 && (
-            <DatabaseSQLPanel
-              id={id}
-              data={data}
-              delayCheckNode={delayCheckNode}
-              nodeParam={nodeParam}
-              handleChangeNodeParam={handleChangeNodeParam}
-            />
-          )}
-          {tab == 2 && (
-            <DatabaseFormPanel
-              handleMode={handleMode}
-              id={id}
-              data={data}
-              fields={fields}
-              allFields={allFields}
-            />
-          )}
-          <OutputDatabase id={id} data={data} key={handleMode}>
-            <div className="text-base font-medium">
-              {t('workflow.nodes.databaseNode.output')}
-            </div>
-          </OutputDatabase>
-          <ExceptionHandling id={id} data={data} />
+    useEffect(() => {
+      setTab((data.nodeParam.mode ?? 0) > 0 ? 2 : 1);
+      setHandleMode(data?.nodeParam?.mode || 0);
+    }, [data]);
+
+    return (
+      <div className={styles.database}>
+        <div className="p-[14px] pb-[6px]">
+          <SelectMode
+            setNode={setNode}
+            id={id}
+            autoSaveCurrentFlow={autoSaveCurrentFlow}
+            canPublishSetNot={canPublishSetNot}
+            getFields={getFields}
+            allTable={allTable}
+            handleCustomSQL={handleCustomSQL}
+            tab={tab}
+            handleMode={handleMode}
+            modeChange={modeChange}
+            delayCheckNode={delayCheckNode}
+            nodeParam={nodeParam}
+            handleDbChange={handleDbChange}
+            handleformdata={handleformdata}
+          />
+          <div className="bg-[#fff] rounded-lg w-full flex flex-col gap-2.5">
+            {tab == 1 && (
+              <DatabaseSQLPanel
+                id={id}
+                data={data}
+                delayCheckNode={delayCheckNode}
+                nodeParam={nodeParam}
+                handleChangeNodeParam={handleChangeNodeParam}
+              />
+            )}
+            {tab == 2 && (
+              <DatabaseFormPanel
+                handleMode={handleMode}
+                id={id}
+                data={data}
+                fields={fields}
+                allFields={allFields}
+              />
+            )}
+            <OutputDatabase id={id} data={data} key={handleMode}>
+              <div className="text-base font-medium">
+                {t('workflow.nodes.databaseNode.output')}
+              </div>
+            </OutputDatabase>
+            <ExceptionHandling id={id} data={data} />
+          </div>
         </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);

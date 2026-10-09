@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, message } from 'antd';
+import { Upload, message, type UploadProps } from 'antd';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { v4 as uuid } from 'uuid';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
@@ -39,8 +39,12 @@ const FlowUpload: React.FC<FlowUploadProps> = ({
     return isValid;
   };
 
-  const fileUpload = (event: unknown): void => {
-    const file = event.file as File;
+  const fileUpload: NonNullable<UploadProps['customRequest']> = event => {
+    if (!(event.file instanceof File)) {
+      event.onError?.(new Error('Expected a browser File for upload'));
+      return;
+    }
+    const file = event.file;
     const fileId = uuid();
     const url = getFixedUrl('/workflow/upload-file');
     const form = new FormData();

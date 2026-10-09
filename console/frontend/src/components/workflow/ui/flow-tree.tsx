@@ -1,18 +1,18 @@
 import React, { memo } from 'react';
-import { Tree } from 'antd';
+import { Tree, type TreeProps } from 'antd';
+import type { BasicDataNode, DataNode } from 'rc-tree/lib/interface';
 
 import flowArrowDown from '@/assets/imgs/workflow/flow-arrow-down.png';
 
-function FLowTree({
+function FLowTree<T extends BasicDataNode = DataNode>({
   treeData = [],
   showLine = true,
   ...reset
-}): React.ReactElement {
+}: TreeProps<T>): React.ReactElement {
   return (
-    <Tree
+    <Tree<T>
       showLine={showLine}
-      //@ts-ignore
-      switcherIcon={({ expanded }) => (
+      switcherIcon={({ expanded }: { expanded?: boolean }) => (
         <img
           src={flowArrowDown}
           className="w-[8px] h-[7px]"
@@ -29,4 +29,4 @@ function FLowTree({
   );
 }
 
-export default memo(FLowTree);
+export default memo(FLowTree) as typeof FLowTree;

@@ -1,3 +1,43 @@
+import type { AddressItem } from '@/components/workflow/types/nodes/agent';
+import type { WorkflowNodeData } from '@/components/workflow/types/domain';
+
+type AgentEditorContext = NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam'
+> & {
+  addressList: AddressItem[];
+  orderToolsList: ToolItem[];
+  setShowModal: React.Dispatch<React.SetStateAction<boolean>>;
+  handleToolChange: (tool: ToolItem) => void;
+  handleUpdateTool: (tool: ToolItem) => void;
+  handleChangeAddress: (id: string, value: string) => void;
+  handleAddAddress: (event: React.MouseEvent<HTMLElement>) => void;
+  handleRemoveAddress: (id: string) => void;
+};
+type AgentPropsFor<Key extends keyof AgentEditorContext> = Pick<
+  AgentEditorContext,
+  Key
+>;
+
+function editablePlugin(data: WorkflowNodeData) {
+  const previous = data.nodeParam.plugin;
+  const plugin = {
+    ...previous,
+    toolsList: previous?.toolsList ?? [],
+    tools: previous?.tools ?? [],
+    mcpServerIds: previous?.mcpServerIds ?? [],
+    mcpServerUrls: previous?.mcpServerUrls ?? [],
+    knowledge: previous?.knowledge ?? [],
+    skills: previous?.skills ?? [],
+  };
+  data.nodeParam.plugin = plugin;
+  return plugin;
+}
+
+import type {
+  NodeComponentProps,
+  NodeDataProps,
+} from '@/components/workflow/nodes/types';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
 import React, { useMemo, useState, memo } from 'react';
 import {
   FlowSelect,
@@ -20,15 +60,10 @@ import ExceptionHandling from '../components/exception-handling';
 import { getToolLatestVersion } from '@/services/plugin';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 import { isValidURL } from '@/components/workflow/utils/reactflowUtils';
-import {
-  AgentProps,
-  AgentDetailProps,
-  ToolItem,
-  UseAgentReturn,
-} from '@/components/workflow/types';
+import { ToolItem } from '@/components/workflow/types';
 import { Icons } from '@/components/workflow/icons';
 
-export const Agent = memo(({ data }: AgentProps) => {
+export const Agent = memo(({ data }: NodeDataProps) => {
   const { t } = useTranslation();
   const agentStrategy = useFlowsManager(state => state.agentStrategy);
 
@@ -51,7 +86,7 @@ export const Agent = memo(({ data }: AgentProps) => {
 const AgentStrategySection = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<'data' | 'handleChangeNodeParam'>): React.ReactElement => {
   const { t } = useTranslation();
   const agentStrategy = useFlowsManager(state => state.agentStrategy);
 
@@ -70,8 +105,11 @@ const AgentStrategySection = ({
             value={data?.nodeParam?.modelConfig?.agentStrategy}
             onChange={value =>
               handleChangeNodeParam(
-                (data: unknown, value: unknown) =>
-                  (data.nodeParam.modelConfig.agentStrategy = value),
+                (data, value) =>
+                  (data.nodeParam.modelConfig = {
+                    ...data.nodeParam.modelConfig,
+                    agentStrategy: value,
+                  }),
                 value
               )
             }
@@ -101,7 +139,9 @@ const PluginSection = ({
   setShowModal,
   handleToolChange,
   handleUpdateTool,
-}): React.ReactElement => {
+}: AgentPropsFor<
+  'orderToolsList' | 'setShowModal' | 'handleToolChange' | 'handleUpdateTool'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   return (
@@ -174,7 +214,7 @@ const PluginSection = ({
                         padding: '2px 15px 2px 2px',
                         borderRadius: '10px',
                       }}
-                      onClick={() => handleUpdateTool(tool as unknown)}
+                      onClick={() => handleUpdateTool(tool)}
                     >
                       <img
                         src={Icons.agent.oneClickUpdate}
@@ -192,7 +232,7 @@ const PluginSection = ({
                     className="w-[18px] h-[18px] rounded-full bg-[#F7F7F7] flex items-center justify-center cursor-pointer"
                     onClick={e => {
                       e.stopPropagation();
-                      handleToolChange(tool as unknown);
+                      handleToolChange(tool);
                     }}
                   >
                     <img
@@ -216,7 +256,12 @@ const McpAddressSection = ({
   handleChangeAddress,
   handleAddAddress,
   handleRemoveAddress,
-}): React.ReactElement => {
+}: AgentPropsFor<
+  | 'addressList'
+  | 'handleChangeAddress'
+  | 'handleAddAddress'
+  | 'handleRemoveAddress'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <FLowCollapse
@@ -262,7 +307,7 @@ const McpAddressSection = ({
                   />
                 )}
               </div>
-              {item?.value?.trim() && !isValidURL(item?.value) && (
+              {item?.value?.trim() && !isValidURL(item.value) && (
                 <div className="text-[#FF4D4F] text-xs font-medium">
                   {t('workflow.nodes.agentNode.invalidUrl')}
                 </div>
@@ -279,7 +324,9 @@ const PromptSection = ({
   id,
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
   const setSelectAgentPromptModalInfo = useFlowsManager(
@@ -325,8 +372,11 @@ const PromptSection = ({
             value={data?.nodeParam?.instruction?.answer}
             onChange={value =>
               handleChangeNodeParam(
-                (data: unknown, value: unknown) =>
-                  (data.nodeParam.instruction.answer = value),
+                (data, value) =>
+                  (data.nodeParam.instruction = {
+                    ...data.nodeParam.instruction,
+                    answer: value,
+                  }),
                 value
               )
             }
@@ -342,8 +392,11 @@ const PromptSection = ({
             value={data?.nodeParam?.instruction?.reasoning}
             onChange={value =>
               handleChangeNodeParam(
-                (data: unknown, value: unknown) =>
-                  (data.nodeParam.instruction.reasoning = value),
+                (data, value) =>
+                  (data.nodeParam.instruction = {
+                    ...data.nodeParam.instruction,
+                    reasoning: value,
+                  }),
                 value
               )
             }
@@ -360,8 +413,11 @@ const PromptSection = ({
             value={data?.nodeParam?.instruction?.query}
             onChange={value =>
               handleChangeNodeParam(
-                (data: unknown, value: unknown) =>
-                  (data.nodeParam.instruction.query = value),
+                (data, value) =>
+                  (data.nodeParam.instruction = {
+                    ...data.nodeParam.instruction,
+                    query: value,
+                  }),
                 value
               )
             }
@@ -379,7 +435,7 @@ const PromptSection = ({
 const LoopCountSection = ({
   data,
   handleChangeNodeParam,
-}): React.ReactElement => {
+}: NodePropsFor<'data' | 'handleChangeNodeParam'>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="bg-[#f8faff] px-[18px] py-2.5 rounded-md flex items-center justify-between">
@@ -405,8 +461,7 @@ const LoopCountSection = ({
           className="w-[15px] h-[15px] flex justify-center items-center"
           onClick={() =>
             handleChangeNodeParam(
-              (data: unknown, value: unknown) =>
-                (data.nodeParam.maxLoopCount = value),
+              (data, value) => (data.nodeParam.maxLoopCount = value),
               (data.nodeParam?.maxLoopCount || 1) - 1 > 0
                 ? (data.nodeParam?.maxLoopCount || 1) - 1
                 : 1
@@ -423,16 +478,14 @@ const LoopCountSection = ({
           value={data?.nodeParam?.maxLoopCount}
           onChange={value =>
             handleChangeNodeParam(
-              (data: unknown, value: unknown) =>
-                (data.nodeParam.maxLoopCount = value),
+              (data, value) => (data.nodeParam.maxLoopCount = value),
               value
             )
           }
           onBlur={() => {
             if (data?.nodeParam?.maxLoopCount === null) {
               handleChangeNodeParam(
-                (data: unknown, value: unknown) =>
-                  (data.nodeParam.maxLoopCount = value),
+                (data, value) => (data.nodeParam.maxLoopCount = value),
                 10
               );
             }
@@ -447,8 +500,7 @@ const LoopCountSection = ({
           className="w-[15px] h-[15px]"
           onClick={() =>
             handleChangeNodeParam(
-              (data: unknown, value: unknown) =>
-                (data.nodeParam.maxLoopCount = value),
+              (data, value) => (data.nodeParam.maxLoopCount = value),
               (data.nodeParam?.maxLoopCount || 1) + 1 <= 100
                 ? (data.nodeParam?.maxLoopCount || 1) + 1
                 : 100
@@ -471,7 +523,7 @@ const useAgent = ({
   id,
   data,
   handleChangeNodeParam,
-}): UseAgentReturn => {
+}: AgentPropsFor<'addressList' | 'id' | 'data' | 'handleChangeNodeParam'>) => {
   const autoSaveCurrentFlow = useFlowsManager(
     state => state.autoSaveCurrentFlow
   );
@@ -488,18 +540,16 @@ const useAgent = ({
       currentAddress.value = value;
     }
     handleChangeNodeParam(
-      (data: unknown, value: unknown) =>
-        (data.nodeParam.plugin.mcpServerUrls = value),
+      (data, value) => (editablePlugin(data).mcpServerUrls = value),
       addressList?.map(item => item?.value)
     );
   });
 
-  const handleAddAddress = useMemoizedFn(e => {
+  const handleAddAddress = useMemoizedFn((e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
     const newAddressList = [...addressList, { id: uuid(), value: '' }];
     handleChangeNodeParam(
-      (data: unknown, value: unknown) =>
-        (data.nodeParam.plugin.mcpServerUrls = value),
+      (data, value) => (editablePlugin(data).mcpServerUrls = value),
       newAddressList?.map(item => item?.value)
     );
   });
@@ -507,33 +557,33 @@ const useAgent = ({
   const handleRemoveAddress = useMemoizedFn((id: string) => {
     const newAddressList = addressList.filter(item => item?.id !== id);
     handleChangeNodeParam(
-      (data: unknown, value: unknown) =>
-        (data.nodeParam.plugin.mcpServerUrls = value),
+      (data, value) => (editablePlugin(data).mcpServerUrls = value),
       newAddressList?.map(item => item?.value)
     );
   });
 
   const handleToolChange = useMemoizedFn((tool: ToolItem) => {
     autoSaveCurrentFlow();
-    setNode(id, (old: unknown) => {
-      const findTool = old.data.nodeParam?.plugin?.toolsList?.find(
+    setNode(id, old => {
+      const plugin = editablePlugin(old.data);
+      const findTool = plugin.toolsList?.find(
         item =>
           item.toolId === tool.toolId ||
           item?.match?.repoIds?.[0] === tool?.toolId
       );
       if (!findTool) {
         if (tool?.type === 'mcp') {
-          old.data.nodeParam.plugin.mcpServerIds.push(tool.toolId);
+          plugin.mcpServerIds.push(tool.toolId);
         } else if (tool?.type === 'tool') {
-          old.data.nodeParam.plugin.tools.push({
+          plugin.tools.push({
             tool_id: tool.toolId,
             version: tool.version || 'V1.0',
           });
         } else if (tool?.type === 'knowledge') {
-          if (old.data.nodeParam.plugin?.knowledge) {
-            old.data.nodeParam.plugin.knowledge.push({
+          if (plugin.knowledge) {
+            plugin.knowledge.push({
               name: tool?.name,
-              description: tool?.description,
+              description: tool?.description ?? '',
               topK: 3,
               match: {
                 repoIds: [tool?.toolId],
@@ -541,10 +591,10 @@ const useAgent = ({
               repoType: tool?.tag === 'CBG-RAG' ? 2 : 3,
             });
           } else {
-            old.data.nodeParam.plugin.knowledge = [
+            plugin.knowledge = [
               {
                 name: tool?.name,
-                description: tool?.description,
+                description: tool?.description ?? '',
                 topK: 3,
                 match: {
                   repoIds: [tool?.toolId],
@@ -554,14 +604,14 @@ const useAgent = ({
             ];
           }
         } else if (tool?.type === 'skill') {
-          if (old.data.nodeParam.plugin?.skills) {
-            old.data.nodeParam.plugin.skills.push({
+          if (plugin.skills) {
+            plugin.skills.push({
               skillId: tool?.toolId,
               name: tool?.name,
               description: tool?.description || '',
             });
           } else {
-            old.data.nodeParam.plugin.skills = [
+            plugin.skills = [
               {
                 skillId: tool?.toolId,
                 name: tool?.name,
@@ -570,7 +620,7 @@ const useAgent = ({
             ];
           }
         }
-        old.data.nodeParam.plugin.toolsList.push({
+        plugin.toolsList.push({
           toolId: tool?.toolId,
           name: tool?.name,
           type: tool?.type,
@@ -579,31 +629,26 @@ const useAgent = ({
         });
       } else {
         if (findTool?.type === 'mcp') {
-          old.data.nodeParam.plugin.mcpServerIds =
-            old.data.nodeParam.plugin.mcpServerIds.filter(
-              item => item !== tool?.toolId
-            );
-        } else if (findTool?.type === 'tool') {
-          old.data.nodeParam.plugin.tools =
-            old.data.nodeParam.plugin.tools.filter(
-              item =>
-                item !== tool?.toolId && item?.['tool_id'] !== tool?.toolId
-            );
-        } else if (findTool?.type === 'knowledge') {
-          old.data.nodeParam.plugin.knowledge =
-            old.data.nodeParam.plugin.knowledge.filter(
-              item => item?.match?.repoIds?.[0] !== tool?.toolId
-            );
-        } else if (findTool?.type === 'skill') {
-          old.data.nodeParam.plugin.skills =
-            old.data.nodeParam.plugin.skills.filter(
-              item => item?.skillId !== tool?.toolId
-            );
-        }
-        old.data.nodeParam.plugin.toolsList =
-          old.data.nodeParam.plugin.toolsList.filter(
-            item => item?.toolId !== tool?.toolId
+          plugin.mcpServerIds = plugin.mcpServerIds.filter(
+            item => item !== tool?.toolId
           );
+        } else if (findTool?.type === 'tool') {
+          plugin.tools = plugin.tools.filter(
+            item =>
+              (typeof item === 'string' ? item : item.tool_id) !== tool.toolId
+          );
+        } else if (findTool?.type === 'knowledge') {
+          plugin.knowledge = plugin.knowledge.filter(
+            item => item?.match?.repoIds?.[0] !== tool?.toolId
+          );
+        } else if (findTool?.type === 'skill') {
+          plugin.skills = plugin.skills.filter(
+            item => item?.skillId !== tool?.toolId
+          );
+        }
+        plugin.toolsList = plugin.toolsList.filter(
+          item => item?.toolId !== tool?.toolId
+        );
       }
       return {
         ...cloneDeep(old),
@@ -622,20 +667,21 @@ const useAgent = ({
   }, [toolsList]);
 
   const handleUpdateTool = useMemoizedFn((tool: ToolItem) => {
-    getToolLatestVersion(tool?.toolId).then((data: unknown) => {
-      setNode(id, (old: unknown) => {
-        const newTools = old?.data?.nodeParam?.plugin?.tools?.filter(
-          (item: unknown) =>
-            item?.tool_id !== tool?.toolId && item !== tool?.toolId
+    getToolLatestVersion([tool.toolId]).then(data => {
+      setNode(id, old => {
+        const plugin = editablePlugin(old.data);
+        const newTools = plugin.tools?.filter(
+          item =>
+            (typeof item === 'string' ? item : item.tool_id) !== tool.toolId
         );
-        const currentTool = old?.data?.nodeParam?.plugin?.toolsList?.find(
-          (item: unknown) => item?.toolId === tool?.toolId
+        const currentTool = plugin.toolsList?.find(
+          item => item?.toolId === tool?.toolId
         );
         newTools.push({
           tool_id: tool?.toolId,
           version: data?.[tool?.toolId || ''] || 'V1.0',
         });
-        old.data.nodeParam.plugin.tools = newTools;
+        plugin.tools = newTools;
         if (currentTool) {
           currentTool.isLatest = true;
           if (currentTool?.pluginName) {
@@ -661,11 +707,11 @@ const useAgent = ({
   };
 };
 
-export const AgentDetail = memo((props: AgentDetailProps) => {
+export const AgentDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { handleChangeNodeParam } = useNodeCommon({
     id,
-    data: data as unknown,
+    data,
   });
   const { t } = useTranslation();
   const [showModal, setShowModal] = useState<boolean>(false);

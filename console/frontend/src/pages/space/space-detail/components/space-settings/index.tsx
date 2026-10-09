@@ -90,10 +90,6 @@ const SpaceSettings: React.FC<{
     setShowLeaveSpaceModal(false);
   }, []);
 
-  const handleDeleteModalSubmit = useCallback((values: any) => {
-    console.log(values, '------------ handleDeleteModalSubmit -----------');
-  }, []);
-
   const showTransferBtn = useMemo(() => {
     return (
       spaceType === 'team' &&
@@ -173,7 +169,7 @@ const SpaceSettings: React.FC<{
       <DeleteSpaceModal
         open={showDeleteModal}
         onClose={handleDeleteModalClose}
-        onSubmit={handleDeleteModalSubmit}
+        onSubmit={handleDeleteModalClose}
       />
       <LeaveSpaceModal
         open={showLeaveSpaceModal}

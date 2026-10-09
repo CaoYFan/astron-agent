@@ -1,10 +1,10 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import { memo } from 'react';
 import FixedOutputs from '../components/fixed-outputs';
 import ExceptionHandling from '../components/exception-handling';
 import SingleInput from '../components/single-input';
-import { NodeCommonProps } from '../../types';
 
-export const RpaDetail = memo((props: NodeCommonProps) => {
+export const RpaDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
 
   return (

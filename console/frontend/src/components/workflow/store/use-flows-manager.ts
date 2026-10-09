@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FlowType } from '@/components/workflow/types';
+
 import { FlowsManagerStoreType } from '@/components/workflow/types/zustand/flowsManager';
 import {
   initialStatus,
@@ -25,17 +25,17 @@ import useIteratorFlowStore from './use-iterator-flow-store';
 
 const useFlowsManagerStore = create<FlowsManagerStoreType>((set, get) => ({
   ...initialStatus,
-  setWillAddNode: (willAddNode: unknown): void => set({ willAddNode }),
-  setBeforeNode: (beforeNode: unknown): void => set({ beforeNode }),
+  setWillAddNode: (willAddNode): void => set({ willAddNode }),
+  setBeforeNode: (beforeNode): void => set({ beforeNode }),
   setControlMode: (controlMode: string): void => set({ controlMode }),
   setHistoryVersion: (historyVersion: boolean): void => set({ historyVersion }),
-  setHistoryVersionData: (historyVersionData: unknown): void =>
+  setHistoryVersionData: (historyVersionData): void =>
     set({ historyVersionData }),
   setAutonomousMode: (autonomousMode: boolean): void => set({ autonomousMode }),
   setCurrentStore: (type): void => setCurrentStore(type, set),
   setSingleNodeDebuggingInfo: (singleNodeDebuggingInfo: {
     nodeId: string;
-    controller: unknown;
+    controller: AbortController | null;
   }): void => set({ singleNodeDebuggingInfo }),
   getCurrentStore: (): typeof useFlowStore | typeof useIteratorFlowStore =>
     getCurrentStore(get),
@@ -63,7 +63,7 @@ const useFlowsManagerStore = create<FlowsManagerStoreType>((set, get) => ({
   setKnowledgeDetailModalInfo: (knowledgeDetailModalInfo: {
     open: boolean;
     nodeId: string;
-    repoId: string;
+    repoId: string | number;
   }): void => set({ knowledgeDetailModalInfo }),
   setKnowledgeParameterModalInfo: (knowledgeParameterModalInfo: {
     open: boolean;
@@ -89,18 +89,16 @@ const useFlowsManagerStore = create<FlowsManagerStoreType>((set, get) => ({
     });
   },
   addTextNodeConfig: (params): Promise<void> => addTextNodeConfig(params, get),
-  removeTextNodeConfig: (id): Promise<unknown> => removeTextNodeConfig(id, get),
+  removeTextNodeConfig: id => removeTextNodeConfig(id, get),
   setModels: (appId): void => setModels(appId, set),
-  setErrNodes: (errNodes: unknown): void => {
+  setErrNodes: (errNodes): void => {
     set({
       errNodes,
     });
   },
   setCurrentFlow: (change): void => {
     const newChange =
-      typeof change === 'function'
-        ? change(get().currentFlow as FlowType)
-        : change;
+      typeof change === 'function' ? change(get().currentFlow) : change;
     set({
       currentFlow: newChange,
     });

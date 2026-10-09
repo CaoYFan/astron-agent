@@ -1,3 +1,16 @@
+import type { generateValidationSchema } from '../../utils/reactflowUtils';
+import type { Edge } from 'reactflow';
+import type { WorkflowDebugNode } from '../domain';
+import type {
+  WorkflowNodeTemplate,
+  WorkflowInput,
+  WorkflowOutput,
+} from '../domain';
+import type { ToolArg } from '@/types/plugin-store';
+import type {
+  WorkflowNode,
+  WorkflowEdge as DomainWorkflowEdge,
+} from '../domain';
 // Chat Debugger 模块的类型定义
 import React from 'react';
 
@@ -23,11 +36,7 @@ export interface FileItem {
 }
 
 // 验证模式类型定义
-export interface ValidationSchema {
-  type: string;
-  properties?: Record<string, unknown>;
-  required?: string[];
-}
+export type ValidationSchema = ReturnType<typeof generateValidationSchema>;
 
 // 中断聊天类型定义
 export interface InterruptChatType {
@@ -41,6 +50,8 @@ export interface InterruptChatType {
 
 // 选项项类型定义
 export interface OptionItem {
+  text?: string;
+  content_type?: string;
   id: string;
   label: string;
   value: string;
@@ -100,7 +111,7 @@ export interface NodeDebuggerResult {
   answerMode?: number;
   answerContent?: string;
   reasoningContent?: string;
-  done: boolean;
+  done?: boolean;
   timeCost?: number;
   tokenCost?: number;
   input?: unknown;
@@ -174,24 +185,10 @@ export interface ChatDebuggerContentProps {
 }
 
 // React Flow Node 类型定义
-export interface ReactFlowNode {
-  id: string;
-  type?: string;
-  data?: Record<string, unknown>;
-  position?: { x: number; y: number };
-  [key: string]: unknown;
-}
+export type ReactFlowNode = WorkflowNode;
 
 // React Flow Edge 类型定义
-export interface ReactFlowEdge {
-  id: string;
-  source: string;
-  target: string;
-  type?: string;
-  animated?: boolean;
-  style?: React.CSSProperties;
-  [key: string]: unknown;
-}
+export type ReactFlowEdge = DomainWorkflowEdge;
 
 // Chat Content Props 类型定义
 export interface ChatContentProps {
@@ -304,9 +301,7 @@ export interface AjvValidationError {
 // export type Position = 'top' | 'right' | 'bottom' | 'left'; // 已由reactflow库提供
 
 // Edge 对象类型定义
-export interface WorkflowEdge extends ReactFlowEdge {
-  data?: EdgeData;
-}
+export type WorkflowEdge = Edge<EdgeData>;
 
 // Custom Edge 相关类型定义
 export interface EdgeData {
@@ -526,7 +521,10 @@ export interface SingleNodeDebuggingProps {
   setRefInputs: (
     inputs: RefInput[] | ((prev: RefInput[]) => RefInput[])
   ) => void;
-  nodeDebugExect: (originalNode: unknown, debuggerNode: unknown) => void;
+  nodeDebugExect: (
+    currentNode: WorkflowNode,
+    runtimeNode: WorkflowDebugNode
+  ) => void;
 }
 
 export interface RefInput {
@@ -593,20 +591,7 @@ export interface TabType {
 }
 
 // UseFlowCommon Hook 相关类型定义
-export interface AddNodeType {
-  idType: string;
-  icon: string;
-  description: string;
-  aliasName: string;
-  data: {
-    nodeMeta: {
-      aliasName: string;
-    };
-    nodeParam: unknown;
-    outputs?: unknown[];
-  };
-  nodeType?: string;
-}
+export type AddNodeType = WorkflowNodeTemplate;
 
 export interface ToolType {
   toolId: string;
@@ -624,8 +609,8 @@ export interface FlowType {
   name: string;
   version?: string;
   ioInversion?: {
-    inputs: unknown[];
-    outputs: unknown[];
+    inputs: WorkflowInput[];
+    outputs: WorkflowOutput[];
   };
 }
 
@@ -635,7 +620,7 @@ export interface McpType {
   mcpId: string;
   name: string;
   description: string;
-  args: unknown[];
+  args: ToolArg[];
 }
 
 export interface PositionType {
@@ -643,18 +628,7 @@ export interface PositionType {
   y: number;
 }
 
-export interface NewNodeType {
-  id: string;
-  type: string;
-  nodeType?: string;
-  position: PositionType;
-  selected: boolean;
-  data: unknown;
-  parentId?: string;
-  extent?: string;
-  zIndex?: number;
-  draggable?: boolean;
-}
+export type NewNodeType = WorkflowNode;
 
 export interface IFlyCollectorType {
   onEvent: (

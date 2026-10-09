@@ -1,12 +1,17 @@
 import {
   Connection,
   Edge,
-  Node,
   OnEdgesChange,
   OnNodesChange,
   ReactFlowInstance,
   Viewport,
 } from 'reactflow';
+import type { StoreApi } from 'zustand';
+import type {
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowSnapshot,
+} from '../../domain';
 
 export type FlowState = {
   template?: string;
@@ -15,16 +20,14 @@ export type FlowState = {
   handle_keys?: Array<string>;
 };
 
-export type NodeType = Node & {
-  nodeType: string;
-};
+export type NodeType = WorkflowNode;
 
 export type FlowStoreType = {
   loadHistory: (nodes: NodeType[], edges: Edge[]) => void;
   zoom: number;
   setZoom: (zoom: number) => void;
-  reactFlowInstance: ReactFlowInstance | null;
-  setReactFlowInstance: (newState: ReactFlowInstance) => void;
+  reactFlowInstance: ReactFlowInstance<WorkflowNodeData> | null;
+  setReactFlowInstance: (newState: ReactFlowInstance<WorkflowNodeData>) => void;
   flowState: FlowState | undefined;
   nodes: NodeType[];
   edges: Edge[];
@@ -45,7 +48,7 @@ export type FlowStoreType = {
   delayCheckNode: (id: string) => void;
   checkNode: (id: string) => boolean;
   deleteNode: (nodeId: string) => void;
-  paste: (selection: { nodes: NodeType[]; edges: Edge[] }) => void;
+  paste: () => Promise<void>;
   onConnect: (connection: Connection) => void;
   removeNodeRef: (
     souceId: string,
@@ -61,8 +64,13 @@ export type FlowStoreType = {
   copyNode: (id: string) => void;
   takeSnapshot: (flag?: boolean) => void;
   undo: () => void;
-  historys: History[];
+  historys: WorkflowSnapshot[];
   setHistorys: (
-    update: History[] | ((oldState: History[]) => History[])
+    update:
+      | WorkflowSnapshot[]
+      | ((oldState: WorkflowSnapshot[]) => WorkflowSnapshot[])
   ) => void;
 };
+
+export type FlowGetter = () => FlowStoreType;
+export type FlowSetter = StoreApi<FlowStoreType>['setState'];

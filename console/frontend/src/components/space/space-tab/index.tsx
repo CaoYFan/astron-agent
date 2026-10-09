@@ -80,9 +80,8 @@ const SpaceTab: React.FC<SpaceTabProps> = ({
 
   // 检查选项权限
   const checkTabPermission = (option: TabOption): boolean => {
-    if (!option.permission || !effectiveUserRole) {
-      return true; // 没有权限配置或用户角色，默认有权限
-    }
+    if (!option.permission) return true;
+    if (!effectiveUserRole) return false;
 
     // 自定义权限检查函数
     if (option.permission.customCheck) {
@@ -111,8 +110,8 @@ const SpaceTab: React.FC<SpaceTabProps> = ({
       return option.visible;
     }
 
-    if (typeof option.visible === 'function' && effectiveUserRole) {
-      return option.visible(effectiveUserRole);
+    if (typeof option.visible === 'function') {
+      return effectiveUserRole ? option.visible(effectiveUserRole) : false;
     }
 
     return true;

@@ -9,6 +9,9 @@ import nodeListAdd from '@/assets/imgs/workflow/node-list-add.png';
 export const TargetHandle = ({
   isConnectable,
   id = '',
+}: {
+  isConnectable: boolean;
+  id?: string;
 }): React.ReactElement => {
   return (
     <Handle
@@ -25,6 +28,10 @@ export const SourceHandle = ({
   isConnectable,
   nodeId,
   id = '',
+}: {
+  isConnectable: boolean;
+  nodeId: string;
+  id?: string;
 }): React.ReactElement => {
   const { handleEdgeAddNode } = useFlowCommon();
   const nodeList = useFlowsManager(state => state.nodeList);
@@ -65,15 +72,16 @@ export const SourceHandle = ({
   }, [nodeList, showIterativeModal, isLoopContainer]);
 
   const generatePosition = useCallback(() => {
+    if (!currentNode || !reactFlowInstance) return undefined;
     const nodeElement = showIterativeModal
       ? document
           .getElementById('iterator-flow-container')
           ?.querySelector(`[data-id= "${nodeId}"]`)
       : document.querySelector(`[data-id= "${nodeId}"]`);
     const { width = 0 } = nodeElement?.getBoundingClientRect() ?? {};
-    const viewPoint = reactFlowInstance?.getViewport();
-    const xPos = currentNode?.position.x;
-    const yPos = currentNode?.position.y;
+    const viewPoint = reactFlowInstance.getViewport();
+    const xPos = currentNode.position.x;
+    const yPos = currentNode.position.y;
     const zoom = 1 / viewPoint.zoom;
     return {
       x: xPos + width * zoom + 100,
@@ -82,8 +90,12 @@ export const SourceHandle = ({
   }, [currentNode, reactFlowInstance, showIterativeModal, nodeId]);
 
   const handleClickNode = useCallback(
-    (node): void => {
-      handleEdgeAddNode(node, generatePosition(), id, currentNode);
+    (
+      node: Parameters<ReturnType<typeof useFlowCommon>['handleEdgeAddNode']>[0]
+    ): void => {
+      const position = generatePosition();
+      if (!currentNode || !position) return;
+      handleEdgeAddNode(node, position, id, currentNode);
     },
     [currentNode, reactFlowInstance, showIterativeModal, nodeId, id]
   );
@@ -113,7 +125,7 @@ export const SourceHandle = ({
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          xmlns:xlink="http://www.w3.org/1999/xlink"
+          xmlnsXlink="http://www.w3.org/1999/xlink"
           fill="none"
           version="1.1"
           width="8"
@@ -125,17 +137,17 @@ export const SourceHandle = ({
             <g>
               <path
                 d="M0,4.99906875L1,4.99905875L7,4.99905875L8,4.99906875L8,2.9990567500000003L7,2.99906175L1,2.99906175L0,2.9990567500000003L0,4.99906875Z"
-                fill-rule="evenodd"
+                fillRule="evenodd"
                 fill="#FFFFFF"
-                fill-opacity="1"
+                fillOpacity="1"
               />
             </g>
             <g>
               <path
                 d="M2.9999722773437503,0L2.99997727734375,1L2.99997727734375,7L2.9999722773437503,8L4.99998427734375,8L4.99997427734375,7L4.99997427734375,1L4.99998427734375,0L2.9999722773437503,0Z"
-                fill-rule="evenodd"
+                fillRule="evenodd"
                 fill="#FFFFFF"
-                fill-opacity="1"
+                fillOpacity="1"
               />
             </g>
           </g>

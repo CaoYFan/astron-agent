@@ -202,7 +202,7 @@ const BottomLogin = ({
                 className="w-[28px] h-[28px] cursor-pointer rounded-full"
                 alt=""
                 onClick={() => {
-                  if (isLogin) return false;
+                  if (isLogin) return;
                   handleLoginRedirect();
                 }}
               />

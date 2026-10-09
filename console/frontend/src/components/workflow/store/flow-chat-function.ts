@@ -1,6 +1,21 @@
+import type { EventSourceMessage } from '@microsoft/fetch-event-source';
+import type { WorkflowNode, WorkflowEdge } from '../types/domain';
+import type {
+  ResponseResult,
+  ResumeChatParams,
+  WorkflowChatParams,
+  ChatDebuggerAdvancedConfig,
+  BuildFlowParams,
+} from '../types';
+import type {
+  ChatGetter,
+  ChatSetter,
+  ChatState,
+  ChatStoreType,
+} from '../types/zustand/chat';
 import React from 'react';
 import { ChatListItem } from '../types';
-import { ReactFlowNode, ReactFlowEdge } from '../types';
+
 import {
   getDialogueAPI,
   saveDialogueAPI,
@@ -16,7 +31,6 @@ import { moveToPosition } from './flow-function';
 import {
   ChatInfoType,
   WebSocketMessageData,
-  FlowResultType,
   StartNodeType,
   InterruptChatType,
 } from '../types';
@@ -40,6 +54,24 @@ import { fetchSseWithContext } from '@/utils/sse-request';
 import { getLanguageCode } from '@/utils/http';
 import useSpaceStore from '@/store/space-store';
 
+interface NodeStatusOptions {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  nodeId?: string;
+  nodeStatus?: string | null;
+  responseResult: ResponseResult;
+  get: ChatGetter;
+}
+
+interface RunDebuggerOptions {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  get: ChatGetter;
+  set: ChatSetter;
+  enters?: StartNodeType[];
+  regen?: boolean;
+}
+
 const initInterruptChat: InterruptChatType = {
   eventId: '',
   interrupt: false,
@@ -60,7 +92,7 @@ const initChatInfo: ChatInfoType = {
   option: null,
 };
 
-export const initialStatus = {
+export const initialStatus: ChatState = {
   userInput: '',
   chatList: [],
   chatInfoRef: cloneDeep(initChatInfo),
@@ -94,14 +126,18 @@ const getWorkflowSseContext = () => {
   };
 };
 
-export const handleChatTypeChange = (type: string, set) => {
+export const handleChatTypeChange = (type: string, set: ChatSetter) => {
   set({
     chatType: type,
   });
 };
 
-const getDialogues = (id: string, set, shouldAddDivider = false): void => {
-  getDialogueAPI(id, 1).then((data: unknown[]) => {
+const getDialogues = (
+  id: string,
+  set: ChatSetter,
+  shouldAddDivider = false
+): void => {
+  getDialogueAPI(id, 1).then(data => {
     const chatList: ChatListItem[] = [];
     let chatId = data?.[0]?.chatId || null;
     data?.forEach(chat => {
@@ -141,14 +177,22 @@ const getDialogues = (id: string, set, shouldAddDivider = false): void => {
     });
   });
 };
-const handleMoveToPosition = (id: string, nodes: ReactFlowNode[]): void => {
-  const currentNode = nodes.find((node: ReactFlowNode) => node.id === id);
+const handleMoveToPosition = (
+  id: string | undefined,
+  nodes: WorkflowNode[]
+): void => {
+  const currentNode = nodes.find((node: WorkflowNode) => node.id === id);
   const zoom = 0.8;
   const xPos = currentNode?.position?.x || 0;
   const yPos = currentNode?.position?.y || 0;
   moveToPosition({ x: -xPos * zoom + 200, y: -yPos * zoom + 200, zoom });
 };
-const pushAskToChatList = (inputs, nodes, nodeId, get): void => {
+const pushAskToChatList = (
+  inputs: StartNodeType[] | undefined,
+  nodes: WorkflowNode[],
+  nodeId: string | undefined,
+  get: ChatGetter
+): void => {
   get().setChatList(chatList => {
     const newInputs = cloneDeep(inputs) || cloneDeep(get().startNodeParams);
     const askParams: ChatListItem = {
@@ -162,7 +206,7 @@ const pushAskToChatList = (inputs, nodes, nodeId, get): void => {
   });
   handleMoveToPosition(nodeId, nodes);
 };
-const pushAnswerToChatList = (get): unknown => {
+const pushAnswerToChatList = (get: ChatGetter): void => {
   get().setChatList(chatList => {
     const answerParams: ChatListItem = {
       id: uuid(),
@@ -175,14 +219,20 @@ const pushAnswerToChatList = (get): unknown => {
     return [...chatList];
   });
 };
-const pushContentToAnswer = (key, content, get): void => {
-  get()[key] = get()[key] + content;
+const pushContentToAnswer = (
+  key:
+    | 'messageNodeTextQueue'
+    | 'endNodeReasoningTextQueue'
+    | 'endNodeTextQueue',
+  content: string | undefined,
+  get: ChatGetter
+): void => {
+  get()[key] = get()[key] + (content ?? '');
 };
-const clearNodeStatus = (get): void => {
+const clearNodeStatus = (get: ChatGetter): void => {
   if (get().userInput) {
     get().setUserInput('');
   }
-  //@ts-ignore
   get().setStartNodeParams(startNodeParams =>
     startNodeParams?.map(input => ({
       ...input,
@@ -197,7 +247,7 @@ const clearNodeStatus = (get): void => {
     }))
   );
 };
-const handleSaveDialogue = (get, set): void => {
+const handleSaveDialogue = (get: ChatGetter, set: ChatSetter): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   const params = {
     chatId: get().chatIdRef,
@@ -214,7 +264,10 @@ const handleSaveDialogue = (get, set): void => {
   );
   get().chatInfoRef = cloneDeep(initChatInfo);
 };
-const handleAuditFailed = (data, get): void => {
+const handleAuditFailed = (
+  data: WebSocketMessageData,
+  get: ChatGetter
+): void => {
   get().messageNodeTextQueue = '';
   get().endNodeReasoningTextQueue = '';
   get().endNodeTextQueue = '';
@@ -222,11 +275,14 @@ const handleAuditFailed = (data, get): void => {
     get().chatInfoRef.answer = {
       messageContent: '',
       reasoningContent: '',
-      content: data?.message,
+      content: data.message ?? '',
     };
-    chatList[chatList.length - 1].messageContent = '';
-    chatList[chatList.length - 1].reasoningContent = '';
-    chatList[chatList.length - 1].content = data?.message;
+    const answer = chatList[chatList.length - 1];
+    if (answer) {
+      answer.messageContent = '';
+      answer.reasoningContent = '';
+      answer.content = data.message;
+    }
     return [...chatList];
   });
   handleMessageEnd(data, get);
@@ -239,7 +295,7 @@ const handleInterrupt = ({
   nodeStatus,
   responseResult,
   get,
-}): void => {
+}: NodeStatusOptions & { data: WebSocketMessageData }): void => {
   const content = data?.['event_data']?.value?.content;
   handleNodeStatusChange({
     nodes,
@@ -266,19 +322,19 @@ const handleInterrupt = ({
     item => item.id !== 'default'
   );
 };
-const handleFlowStop = (data, get): void => {
+const handleFlowStop = (data: WebSocketMessageData, get: ChatGetter): void => {
   if (data.code !== 0) {
     pushContentToAnswer('endNodeTextQueue', data?.message, get);
   }
   handleMessageEnd(data, get);
 };
-const extractNodeInfo = (data): unknown => {
+const extractNodeInfo = (data: WebSocketMessageData) => {
   const flowResult = data.choices?.[0]?.['finish_reason'];
   const node = data?.['workflow_step']?.node;
   const nodeId = node?.id;
   const nodeStatus = node?.['finish_reason'];
   const content = data.choices?.[0]?.delta?.content;
-  const responseResult = {
+  const responseResult: ResponseResult = {
     timeCost: node?.['executed_time'],
     tokenCost: node?.usage?.['total_tokens'],
     inputs: node?.inputs,
@@ -300,7 +356,11 @@ const extractNodeInfo = (data): unknown => {
     responseResult,
   };
 };
-const handleAnswerContent = (nodeId, responseResult, get): void => {
+const handleAnswerContent = (
+  nodeId: string | undefined,
+  responseResult: ResponseResult,
+  get: ChatGetter
+): void => {
   if (nodeId?.startsWith('node-end') && responseResult?.reasoningContent) {
     pushContentToAnswer(
       'endNodeReasoningTextQueue',
@@ -323,13 +383,21 @@ const handleAnswerContent = (nodeId, responseResult, get): void => {
     );
   }
 };
-const updateAnswerItem = (nodeId, responseResult, get): void => {
+const updateAnswerItem = (
+  nodeId: string | undefined,
+  responseResult: ResponseResult,
+  get: ChatGetter
+): void => {
   if (nodeId?.startsWith('node-end') || nodeId?.startsWith('message')) {
     get().chatInfoRef.answerItem =
       get().chatInfoRef.answerItem + responseResult?.nodeAnswerContent;
   }
 };
-const handleRunningNode = (currentNode, responseResult, get): void => {
+const handleRunningNode = (
+  currentNode: WorkflowNode,
+  responseResult: ResponseResult,
+  get: ChatGetter
+): void => {
   currentNode.data.status = 'running';
   const beforeContent = currentNode?.data?.debuggerResult?.done
     ? ''
@@ -344,22 +412,27 @@ const handleRunningNode = (currentNode, responseResult, get): void => {
     done: false,
   };
 };
-const handleFinishedNode = (nodeId, currentNode, responseResult, get): void => {
+const handleFinishedNode = (
+  nodeId: string | undefined,
+  currentNode: WorkflowNode,
+  responseResult: ResponseResult,
+  get: ChatGetter
+): void => {
   const beforeContent = currentNode?.data?.debuggerResult?.answerContent ?? '';
   const beforeReasoningContent =
     currentNode?.data?.debuggerResult?.reasoningContent ?? '';
   currentNode.data.debuggerResult = {
     timeCost: responseResult?.timeCost || undefined,
-    tokenCost: responseResult?.timeCost?.totalTokens || undefined,
+    tokenCost: responseResult.tokenCost || undefined,
     input: generateInputsAndOutputsOrder(
       currentNode,
-      responseResult.inputs,
+      responseResult.inputs ?? {},
       'inputs'
     ),
     rawOutput: responseResult?.rawOutput,
     output: generateInputsAndOutputsOrder(
       currentNode,
-      responseResult.outputs,
+      responseResult.outputs ?? {},
       'outputs'
     ),
     errorOutputs: responseResult?.errorOutputs,
@@ -381,7 +454,7 @@ const handleFinishedNode = (nodeId, currentNode, responseResult, get): void => {
       JSON.stringify(responseResult?.outputs),
       get
     );
-    get().chatInfoRef.answerItem = JSON.stringify(responseResult?.outputs);
+    get().chatInfoRef.answerItem = JSON.stringify(responseResult.outputs ?? {});
   }
   if (nodeId?.startsWith('message')) {
     pushContentToAnswer('messageNodeTextQueue', '\n', get);
@@ -394,10 +467,11 @@ const handleNodeStatusChange = ({
   nodeStatus,
   responseResult,
   get,
-}): void => {
+}: NodeStatusOptions): void => {
   const setEdges = useFlowStore.getState().setEdges;
   const setNode = useFlowStore.getState().setNode;
   const currentNode = nodes.find(node => node.id === nodeId);
+  if (!currentNode) return;
   const autonomousMode = useFlowsManager.getState().autonomousMode;
   handleAnswerContent(nodeId, responseResult, get);
   updateAnswerItem(nodeId, responseResult, get);
@@ -431,7 +505,7 @@ const handleNodeStatusChange = ({
       return cloneDeep(edges);
     });
   }
-  setNode(nodeId, cloneDeep(currentNode));
+  setNode(currentNode.id, cloneDeep(currentNode));
   get().preRunningNodeIds.push(currentNode?.id);
   //跟随模式下需要根据节点移动画布
   if (currentNode?.id?.startsWith('node-start')) {
@@ -450,11 +524,11 @@ const handleNodeStatusChange = ({
   }
 };
 const handleMessage = (
-  nodes: ReactFlowNode[],
-  edges: ReactFlowEdge[],
-  e: MessageEvent,
-  get,
-  set
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  e: EventSourceMessage,
+  get: ChatGetter,
+  set: ChatSetter
 ): void => {
   if (!e.data || !isJSON(e.data)) return;
   const data: WebSocketMessageData = JSON.parse(e.data);
@@ -497,7 +571,7 @@ const handleRunningNodeStatus = (): void => {
   setNodes(nodes => {
     nodes.forEach(node => {
       if (node?.data?.status === 'running') {
-        node.data.debuggerResult.cancelReason = i18n.t(
+        (node.data.debuggerResult ??= {}).cancelReason = i18n.t(
           'workflow.nodes.chatDebugger.workflowTerminated'
         );
         node.data.status = 'cancel';
@@ -508,21 +582,28 @@ const handleRunningNodeStatus = (): void => {
 };
 const handleSynchronizeDataToXfyun = (): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
-  const botId = isJSON(currentFlow?.ext)
-    ? JSON.parse(currentFlow?.ext)?.botId
-    : '';
+  const extension = currentFlow?.ext;
+  if (!extension || !isJSON(extension)) return;
+  const parsed: unknown = JSON.parse(extension);
+  if (typeof parsed !== 'object' || parsed === null || !('botId' in parsed))
+    return;
+  const botId = parsed.botId;
+  if (typeof botId !== 'string' && typeof botId !== 'number') return;
   const params = {
     botId,
   };
   getInputsType(params);
 };
-const handleMessageEnd = (data: WebSocketMessageData, get): void => {
+const handleMessageEnd = (
+  data: WebSocketMessageData,
+  get: ChatGetter
+): void => {
   const setShowNodeList = useFlowsManager.getState().setShowNodeList;
   const setFlowResult = useFlowsManager.getState().setFlowResult;
   const setCanvasesDisabled = useFlowsManager.getState().setCanvasesDisabled;
   const historyVersion = useFlowsManager.getState().historyVersion;
   const setEdges = useFlowStore.getState().setEdges;
-  const flowResult: FlowResultType = {
+  const flowResult = {
     status: data.code === 0 ? 'success' : 'failed',
     timeCost: (data?.executedTime || 0).toString(),
     totalTokens: (data?.usage?.['total_tokens'] || 0).toString(),
@@ -546,9 +627,9 @@ const handleMessageEnd = (data: WebSocketMessageData, get): void => {
 };
 const createActiveWorkflowSseLifecycle = (
   controller: AbortController,
-  get,
-  handleSseMessage: (event: MessageEvent) => boolean
-): WorkflowSseLifecycle<MessageEvent> =>
+  get: ChatGetter,
+  handleSseMessage: (event: EventSourceMessage) => boolean
+): WorkflowSseLifecycle<EventSourceMessage> =>
   createWorkflowSseLifecycle({
     isCurrent: () => get().controllerRef === controller,
     finalize: () =>
@@ -565,7 +646,11 @@ const createActiveWorkflowSseLifecycle = (
     onTransportError: error =>
       console.error('[Workflow SSE] Request failed', error),
   });
-const handleResumeChat = (content, get, set): void => {
+const handleResumeChat = (
+  content: string | undefined,
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   const nodes = useFlowStore.getState().nodes;
   const edges = useFlowStore.getState().edges;
@@ -598,7 +683,7 @@ const handleResumeChat = (content, get, set): void => {
   );
   pushAnswerToChatList(get);
   const url = getFixedUrl('/workflow/resume');
-  const params = {
+  const params: ResumeChatParams = {
     flow_id: currentFlow?.flowId,
     eventId: get().interruptChat?.eventId,
     eventType: content ? 'resume' : 'ignore',
@@ -637,7 +722,7 @@ const handleResumeChat = (content, get, set): void => {
   }).catch(() => undefined);
   clearNodeStatus(get);
 };
-const runDebugger = (obj: unknown): void => {
+const runDebugger = (obj: RunDebuggerOptions): void => {
   const { nodes, edges, get, set, enters, regen = false } = obj;
   const currentFlow = useFlowsManager.getState().currentFlow;
   const historyVersion = useFlowsManager.getState().historyVersion;
@@ -647,7 +732,7 @@ const runDebugger = (obj: unknown): void => {
   set({
     controllerRef: controller,
   });
-  const inputs = {};
+  const inputs: Record<string, unknown> = {};
   const enterlist = enters ?? get().startNodeParams;
   enterlist.forEach(params => {
     if (
@@ -658,14 +743,22 @@ const runDebugger = (obj: unknown): void => {
         isJSON(params.default as string) &&
         JSON.parse(params.default as string);
     } else if (params.fileType && params.type === 'string') {
-      inputs[params.name] = params.default?.[0]?.url;
+      const first = Array.isArray(params.default)
+        ? params.default[0]
+        : undefined;
+      inputs[params.name] =
+        typeof first === 'object' && first !== null ? first.url : undefined;
     } else if (params.fileType && params.type === 'array-string') {
-      inputs[params.name] = params.default?.map(item => item?.url);
+      inputs[params.name] = Array.isArray(params.default)
+        ? params.default.flatMap(item =>
+            typeof item === 'object' && item !== null ? [item.url] : []
+          )
+        : [];
     } else {
       inputs[params.name] = params.default;
     }
   });
-  const params = {
+  const params: WorkflowChatParams = {
     flow_id: currentFlow?.flowId,
     inputs: inputs,
     chatId: get().chatIdRef,
@@ -704,7 +797,7 @@ const runDebugger = (obj: unknown): void => {
   }).catch(() => undefined);
   clearNodeStatus(get);
 };
-const advancedConfig = (): unknown => {
+const advancedConfig = (): ChatDebuggerAdvancedConfig => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   if (currentFlow?.advancedConfig && isJSON(currentFlow?.advancedConfig)) {
     const parsedConfig = JSON.parse(currentFlow?.advancedConfig);
@@ -728,20 +821,23 @@ const handleRunDebugger = ({
   set,
   inputs,
   regen = false,
-}): void => {
+}: RunDebuggerOptions & { inputs?: StartNodeType[] }): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   const setCanPublish = useFlowsManager.getState().setCanPublish;
   const setShowNodeList = useFlowsManager.getState().setShowNodeList;
   const setFlowResult = useFlowsManager.getState().setFlowResult;
   const historyVersion = useFlowsManager.getState().historyVersion;
   const setCanvasesDisabled = useFlowsManager.getState().setCanvasesDisabled;
+  const suggestedQuestion =
+    inputs?.[0]?.default ?? get().startNodeParams[0]?.default;
   if (
+    typeof suggestedQuestion === 'string' &&
     advancedConfig()?.suggestedQuestionsAfterAnswer?.enabled &&
     get().startNodeParams?.length === 1
   ) {
     get().setSuggestLoading(true);
     nextQuestionAdvice({
-      question: inputs?.[0]?.default || get().startNodeParams?.[0]?.default,
+      question: suggestedQuestion,
     })
       .then(data => {
         get().setSuggestProblem(() => data);
@@ -751,9 +847,9 @@ const handleRunDebugger = ({
     get().setSuggestProblem(() => []);
   }
   get().buildPassRef = false;
-  let params = {};
-  let api: ((params: unknown) => Promise<unknown>) | null = null;
-  if (get().historyVersion) {
+  let params: BuildFlowParams;
+  let api: (params: BuildFlowParams) => Promise<unknown>;
+  if (useFlowsManager.getState().historyVersion) {
     get().versionId = uuid();
     params = {
       flowId: currentFlow?.flowId,
@@ -823,7 +919,7 @@ const handleRunDebugger = ({
     handleSynchronizeDataToXfyun();
   });
 };
-const clearData = (setOpen, get): void => {
+const clearData = (setOpen: (open: boolean) => void, get: ChatGetter): void => {
   const setFlowResult = useFlowsManager.getState().setFlowResult;
   const setShowNodeList = useFlowsManager.getState().setShowNodeList;
   const setCanvasesDisabled = useFlowsManager.getState().setCanvasesDisabled;
@@ -844,7 +940,7 @@ const clearData = (setOpen, get): void => {
   setCanvasesDisabled(false);
 };
 
-const canRunDebugger = (get): boolean => {
+const canRunDebugger = (get: ChatGetter): boolean => {
   if (!get().debuggering && get().interruptChat?.type === 'option')
     return false;
   if (
@@ -855,18 +951,38 @@ const canRunDebugger = (get): boolean => {
         if (params.errorMsg) {
           return false;
         } else if (params.fileType) {
-          return params?.default?.length > 0;
+          return (
+            Array.isArray(params.default) &&
+            params.default.length > 0 &&
+            params.default.every(
+              item =>
+                typeof item === 'object' &&
+                item !== null &&
+                !item.loading &&
+                Boolean(item.url)
+            )
+          );
         } else if (params.type === 'object' || params.type.includes('array')) {
-          return isJSON(params?.default as string);
+          return (
+            typeof params.default === 'string' &&
+            Boolean(isJSON(params.default))
+          );
         } else if (params.type === 'string') {
-          return (params?.default as string)?.trim();
+          return (
+            typeof params.default === 'string' && Boolean(params.default.trim())
+          );
         } else if (params.type === 'boolean') {
           return typeof params?.default === 'boolean';
         } else {
           return typeof params?.default !== 'string';
         }
       } else if (params.fileType) {
-        return params?.default?.every(item => !item?.loading);
+        return (
+          Array.isArray(params.default) &&
+          params.default.every(
+            item => typeof item === 'object' && item !== null && !item.loading
+          )
+        );
       } else {
         return true;
       }
@@ -885,9 +1001,9 @@ const canRunDebugger = (get): boolean => {
 };
 
 const handleEnterKey = (
-  e: React.KeyboardEvent<HTMLInputElement>,
-  get,
-  set
+  e: React.KeyboardEvent<HTMLElement>,
+  get: ChatGetter,
+  set: ChatSetter
 ): void => {
   e.stopPropagation();
   if (
@@ -926,7 +1042,8 @@ const handleEnterKey = (
   } else if (e.key === 'Tab') {
     get().setUserInput(get().userInput + '\t');
     get().setStartNodeParams(startNodeParams => {
-      startNodeParams[0].default = startNodeParams[0].default + '\t';
+      const first = startNodeParams[0];
+      if (first && typeof first.default === 'string') first.default += '\t';
       return [...startNodeParams];
     });
     e.preventDefault();
@@ -934,10 +1051,10 @@ const handleEnterKey = (
 };
 
 const resetNodesAndEdges = (
-  get
+  get: ChatGetter
 ): {
-  nodes: ReactFlowNode[];
-  edges: ReactFlowEdge[];
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 } => {
   const nodes = useFlowStore.getState().nodes;
   const edges = useFlowStore.getState().edges;
@@ -956,7 +1073,7 @@ const resetNodesAndEdges = (
   };
 };
 
-const handleStopConversation = (get): void => {
+const handleStopConversation = (get: ChatGetter): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   const setCanvasesDisabled = useFlowsManager.getState().setCanvasesDisabled;
   const historyVersion = useFlowsManager.getState().historyVersion;
@@ -1013,11 +1130,12 @@ const handleStopConversation = (get): void => {
   });
 };
 
-const deleteAllChat = (get): void => {
+const deleteAllChat = (get: ChatGetter): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   const historyVersion = useFlowsManager.getState().historyVersion;
   const setCanvasesDisabled = useFlowsManager.getState().setCanvasesDisabled;
-  workflowDialogClear(currentFlow?.id, 1).then(() => {
+  if (!currentFlow?.id) return;
+  workflowDialogClear(currentFlow.id, 1).then(() => {
     get().chatIdRef = uuid().replace(/-/g, '');
     get().setDeleteAllModal(false);
     get().setChatList([]);
@@ -1026,7 +1144,7 @@ const deleteAllChat = (get): void => {
   });
 };
 
-const handleWorkflowDeleteComparisons = (get): void => {
+const handleWorkflowDeleteComparisons = (get: ChatGetter): void => {
   const currentFlow = useFlowsManager.getState().currentFlow;
   if (!get().versionId) return;
   const parmas = {
@@ -1036,7 +1154,11 @@ const handleWorkflowDeleteComparisons = (get): void => {
   workflowDeleteComparisons(parmas);
 };
 
-const setChatList = (change: unknown, get, set): void => {
+const setChatList = (
+  change: Parameters<ChatStoreType['setChatList']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().chatList) : change;
   set({
@@ -1044,7 +1166,11 @@ const setChatList = (change: unknown, get, set): void => {
   });
 };
 
-const setStartNodeParams = (change: unknown, get, set): void => {
+const setStartNodeParams = (
+  change: Parameters<ChatStoreType['setStartNodeParams']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().startNodeParams) : change;
   set({
@@ -1052,7 +1178,11 @@ const setStartNodeParams = (change: unknown, get, set): void => {
   });
 };
 
-const setInterruptChat = (change: unknown, get, set): void => {
+const setInterruptChat = (
+  change: Parameters<ChatStoreType['setInterruptChat']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().interruptChat) : change;
   set({
@@ -1060,7 +1190,11 @@ const setInterruptChat = (change: unknown, get, set): void => {
   });
 };
 
-const setSuggestLoading = (change: unknown, get, set): void => {
+const setSuggestLoading = (
+  change: Parameters<ChatStoreType['setSuggestLoading']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().suggestLoading) : change;
   set({
@@ -1068,7 +1202,11 @@ const setSuggestLoading = (change: unknown, get, set): void => {
   });
 };
 
-const setSuggestProblem = (change: unknown, get, set): void => {
+const setSuggestProblem = (
+  change: Parameters<ChatStoreType['setSuggestProblem']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().suggestProblem) : change;
   set({
@@ -1076,7 +1214,11 @@ const setSuggestProblem = (change: unknown, get, set): void => {
   });
 };
 
-const setUserWheel = (change: unknown, get, set): void => {
+const setUserWheel = (
+  change: Parameters<ChatStoreType['setUserWheel']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().userWheel) : change;
   set({
@@ -1084,7 +1226,11 @@ const setUserWheel = (change: unknown, get, set): void => {
   });
 };
 
-const setDebuggering = (change: unknown, get, set): void => {
+const setDebuggering = (
+  change: Parameters<ChatStoreType['setDebuggering']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().debuggering) : change;
   set({
@@ -1092,7 +1238,11 @@ const setDebuggering = (change: unknown, get, set): void => {
   });
 };
 
-const setDeleteAllModal = (change: unknown, get, set): void => {
+const setDeleteAllModal = (
+  change: Parameters<ChatStoreType['setDeleteAllModal']>[0],
+  get: ChatGetter,
+  set: ChatSetter
+): void => {
   const newChange =
     typeof change === 'function' ? change(get().deleteAllModal) : change;
   set({
@@ -1100,19 +1250,19 @@ const setDeleteAllModal = (change: unknown, get, set): void => {
   });
 };
 
-const setWsMessageStatus = (status: string, set): void => {
+const setWsMessageStatus = (status: string, set: ChatSetter): void => {
   set({
     wsMessageStatus: status,
   });
 };
 
-const setUserInput = (value: string, set): void => {
+const setUserInput = (value: string, set: ChatSetter): void => {
   set({
     userInput: value,
   });
 };
 
-const setQueue = (number, get, set): void => {
+const setQueue = (number: number, get: ChatGetter, set: ChatSetter): void => {
   const key = get().messageNodeTextQueue
     ? 'messageNodeTextQueue'
     : get().endNodeReasoningTextQueue
@@ -1123,7 +1273,7 @@ const setQueue = (number, get, set): void => {
   });
 };
 
-const getTextQueueContent = (get): string => {
+const getTextQueueContent = (get: ChatGetter): string => {
   return (
     get().messageNodeTextQueue ||
     get().endNodeReasoningTextQueue ||
@@ -1131,7 +1281,9 @@ const getTextQueueContent = (get): string => {
   );
 };
 
-const getChatKey = (get): string => {
+const getChatKey = (
+  get: ChatGetter
+): ReturnType<ChatStoreType['getChatKey']> => {
   return get().messageNodeTextQueue
     ? 'messageContent'
     : get().endNodeReasoningTextQueue
@@ -1139,7 +1291,7 @@ const getChatKey = (get): string => {
       : 'content';
 };
 
-const isChatEnd = (get): boolean => {
+const isChatEnd = (get: ChatGetter): boolean => {
   return (
     !get().messageNodeTextQueue &&
     !get().endNodeReasoningTextQueue &&

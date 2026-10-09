@@ -1,3 +1,16 @@
+import type { ChangeNodeParameter } from '@/components/workflow/nodes/types';
+import type {
+  WorkflowInput,
+  WorkflowOutput,
+  WorkflowNodeData,
+} from '@/components/workflow/types/domain';
+import type {
+  RefInput,
+  UploadFileItem,
+} from '@/components/workflow/types/drawer/chat-debugger';
+import type { UseSingleNodeDebuggingReturn } from '@/components/workflow/types/drawer/single-node-debugging';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import { NodeDebuggingStatus } from '@/components/workflow/nodes/components/node-debugger';
 import React, {
   useCallback,
@@ -44,223 +57,250 @@ import { generateUploadType } from '@/components/workflow/utils/reactflowUtils';
 
 import dotSvg from '@/assets/imgs/workflow/dot.svg';
 
-export const Inputs = memo(({ label, inputs }) => {
-  const { t } = useTranslation();
-  const elementRef = useRef(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+export const Inputs = memo(
+  ({ label, inputs }: { label: string; inputs: WorkflowInput[] }) => {
+    const { t } = useTranslation();
+    const elementRef = useRef<HTMLDivElement>(null);
+    const [showDropdown, setShowDropdown] = useState(false);
 
-  const ItemBadge = ({
-    item,
-    size = 'xs',
-  }: {
-    item: unknown;
-    size: 'xs' | 'base';
-  }): React.ReactElement => {
-    const hasError = item?.nameErrMsg || item?.schema?.value?.contentErrMsg;
+    const ItemBadge = ({
+      item,
+      size = 'xs',
+    }: {
+      item: WorkflowOutput;
+      size: 'xs' | 'base';
+    }): React.ReactElement => {
+      const hasError = item?.nameErrMsg || item?.schema?.value?.contentErrMsg;
 
-    const containerStyle = {
-      backgroundColor: hasError ? '#F0AE784D' : '#F2F5FE',
-      color: hasError ? '#ff7300' : '',
-    };
+      const containerStyle = {
+        backgroundColor: hasError ? '#F0AE784D' : '#F2F5FE',
+        color: hasError ? '#ff7300' : '',
+      };
 
-    const labelStyle = {
-      color: hasError ? '#f4c69e' : '#7F7F7F',
-    };
+      const labelStyle = {
+        color: hasError ? '#f4c69e' : '#7F7F7F',
+      };
 
-    const displayName = item?.name?.trim()
-      ? item?.name
-      : t('workflow.nodes.common.undefined');
+      const displayName = item?.name?.trim()
+        ? item?.name
+        : t('workflow.nodes.common.undefined');
 
-    return (
-      <div
-        key={item?.id}
-        className={`flex items-center gap-0.5 px-1 py-0.5 rounded text-${size} font-medium`}
-        style={containerStyle}
-      >
-        <span style={labelStyle}>{useFlowTypeRender(item)}</span>
-        <span className="whitespace-nowrap">{displayName}</span>
-      </div>
-    );
-  };
-
-  const items = [
-    {
-      key: '1',
-      label: (
-        <div className="p-1 w-[300px] flex items-center gap-1 flex-wrap">
-          {inputs?.map(item => (
-            <ItemBadge item={item} size="base" />
-          ))}
+      return (
+        <div
+          key={item?.id}
+          className={`flex items-center gap-0.5 px-1 py-0.5 rounded text-${size} font-medium`}
+          style={containerStyle}
+        >
+          <span style={labelStyle}>{useFlowTypeRender(item)}</span>
+          <span className="whitespace-nowrap">{displayName}</span>
         </div>
-      ),
-    },
-  ];
+      );
+    };
 
-  useEffect(() => {
-    if (elementRef.current) {
-      const hasOverflow =
-        elementRef.current.scrollHeight > elementRef.current.clientHeight ||
-        elementRef.current.scrollWidth > elementRef.current.clientWidth;
-      setShowDropdown(hasOverflow);
-    }
-  }, [inputs]);
-
-  return (
-    <>
-      <div className="text-xs text-[#333] text-right self-center">{label}</div>
-      <div
-        className="flex items-center gap-1.5 overflow-hidden relative"
-        ref={elementRef}
-      >
-        {inputs?.map(item => (
-          <ItemBadge item={item} size="xs" />
-        ))}
-        {showDropdown && (
-          <div className="absolute right-0 top-0 flex items-center">
-            <div
-              className="w-[93px] h-[20px]"
-              style={{
-                background:
-                  'linear-gradient(90deg, rgba(255, 255, 255, 0) 0px, rgb(252, 252, 255) 78%)',
-              }}
-            ></div>
-            <div className="bg-[#F2F5FE] flex items-center justify-center rounded overflow-hidden absolute right-0 top-[2px]">
-              <Dropdown menu={{ items }} placement="bottomRight">
-                <img
-                  src={dotSvg}
-                  className="w-4 h-4 cursor-pointer hover:bg-[#DDE3F1] rounded"
-                  alt=""
-                />
-              </Dropdown>
-            </div>
+    const items = [
+      {
+        key: '1',
+        label: (
+          <div className="p-1 w-[300px] flex items-center gap-1 flex-wrap">
+            {inputs?.map(item => (
+              <ItemBadge item={item} size="base" />
+            ))}
           </div>
-        )}
-      </div>
-    </>
-  );
-});
+        ),
+      },
+    ];
 
-export const Outputs = memo(({ data, label, outputs }) => {
-  const { t } = useTranslation();
-  const elementRef = useRef(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+    useEffect(() => {
+      if (elementRef.current) {
+        const hasOverflow =
+          elementRef.current.scrollHeight > elementRef.current.clientHeight ||
+          elementRef.current.scrollWidth > elementRef.current.clientWidth;
+        setShowDropdown(hasOverflow);
+      }
+    }, [inputs]);
 
-  const ItemBadge = ({ item, size = 'xs' }: unknown): React.ReactElement => {
     return (
-      <div
-        key={item?.id}
-        className={`flex items-center gap-0.5 px-1 py-0.5 rounded font-medium text-${size}`}
-        style={{
-          backgroundColor: item?.nameErrMsg ? '#F0AE784D' : '#F2F5FE',
-          color: item?.nameErrMsg ? '#ff7300' : '',
-        }}
-      >
-        <span
+      <>
+        <div className="text-xs text-[#333] text-right self-center">
+          {label}
+        </div>
+        <div
+          className="flex items-center gap-1.5 overflow-hidden relative"
+          ref={elementRef}
+        >
+          {inputs?.map(item => (
+            <ItemBadge item={item} size="xs" />
+          ))}
+          {showDropdown && (
+            <div className="absolute right-0 top-0 flex items-center">
+              <div
+                className="w-[93px] h-[20px]"
+                style={{
+                  background:
+                    'linear-gradient(90deg, rgba(255, 255, 255, 0) 0px, rgb(252, 252, 255) 78%)',
+                }}
+              ></div>
+              <div className="bg-[#F2F5FE] flex items-center justify-center rounded overflow-hidden absolute right-0 top-[2px]">
+                <Dropdown menu={{ items }} placement="bottomRight">
+                  <img
+                    src={dotSvg}
+                    className="w-4 h-4 cursor-pointer hover:bg-[#DDE3F1] rounded"
+                    alt=""
+                  />
+                </Dropdown>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+);
+
+export const Outputs = memo(
+  ({
+    data,
+    label,
+    outputs,
+  }: {
+    data: WorkflowNodeData;
+    label: string;
+    outputs: WorkflowOutput[];
+  }) => {
+    const { t } = useTranslation();
+    const elementRef = useRef<HTMLDivElement>(null);
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    const ItemBadge = ({
+      item,
+      size = 'xs',
+    }: {
+      item: WorkflowOutput;
+      size?: 'xs' | 'base';
+    }): React.ReactElement => {
+      return (
+        <div
+          key={item?.id}
+          className={`flex items-center gap-0.5 px-1 py-0.5 rounded font-medium text-${size}`}
           style={{
-            color: item?.nameErrMsg ? '#f4c69e' : '#7F7F7F',
+            backgroundColor: item?.nameErrMsg ? '#F0AE784D' : '#F2F5FE',
+            color: item?.nameErrMsg ? '#ff7300' : '',
           }}
         >
-          {useFlowTypeRender(item)}
-        </span>
-        <span className="whitespace-nowrap">
-          {item?.name?.trim()
-            ? item?.name
-            : t('workflow.nodes.common.undefined')}
-        </span>
-      </div>
-    );
-  };
-
-  const exceptionHandlingOutput = useMemo(() => {
-    return (data?.retryConfig?.errorStrategy === 2 ||
-      data?.retryConfig?.errorStrategy === 1) &&
-      data?.retryConfig?.shouldRetry
-      ? [
-          {
-            id: uuid(),
-            name: 'errorCode',
-            schema: {
-              type: 'string',
-              default: t('workflow.exceptionHandling.errorCode'),
-            },
-            nameErrMsg: '',
-          },
-          {
-            id: uuid(),
-            name: 'errorMessage',
-            schema: {
-              type: 'string',
-              default: t('workflow.exceptionHandling.errorMessage'),
-            },
-            nameErrMsg: '',
-          },
-        ]
-      : [];
-  }, [data?.retryConfig?.errorStrategy, data?.retryConfig?.shouldRetry]);
-
-  const finallyOutputs = useMemo(() => {
-    return [...outputs, ...exceptionHandlingOutput];
-  }, [outputs, exceptionHandlingOutput]);
-
-  const items = [
-    {
-      key: '1',
-      label: (
-        <div className="p-1 w-[300px] flex items-center gap-1 flex-wrap">
-          {finallyOutputs?.map(item => (
-            <ItemBadge item={item} size="base" />
-          ))}
+          <span
+            style={{
+              color: item?.nameErrMsg ? '#f4c69e' : '#7F7F7F',
+            }}
+          >
+            {useFlowTypeRender(item)}
+          </span>
+          <span className="whitespace-nowrap">
+            {item?.name?.trim()
+              ? item?.name
+              : t('workflow.nodes.common.undefined')}
+          </span>
         </div>
-      ),
-    },
-  ];
+      );
+    };
 
-  useEffect(() => {
-    if (elementRef.current) {
-      const hasOverflow =
-        elementRef.current.scrollHeight > elementRef.current.clientHeight ||
-        elementRef.current.scrollWidth > elementRef.current.clientWidth;
-      setShowDropdown(hasOverflow);
-    }
-  }, [finallyOutputs]);
+    const exceptionHandlingOutput = useMemo(() => {
+      return (data?.retryConfig?.errorStrategy === 2 ||
+        data?.retryConfig?.errorStrategy === 1) &&
+        data?.retryConfig?.shouldRetry
+        ? [
+            {
+              id: uuid(),
+              name: 'errorCode',
+              schema: {
+                type: 'string',
+                default: t('workflow.exceptionHandling.errorCode'),
+              },
+              nameErrMsg: '',
+            },
+            {
+              id: uuid(),
+              name: 'errorMessage',
+              schema: {
+                type: 'string',
+                default: t('workflow.exceptionHandling.errorMessage'),
+              },
+              nameErrMsg: '',
+            },
+          ]
+        : [];
+    }, [data?.retryConfig?.errorStrategy, data?.retryConfig?.shouldRetry]);
 
-  return (
-    <>
-      <div className="text-xs text-[#333] text-right self-center">{label}</div>
-      <div
-        className="flex items-center gap-1.5 overflow-hidden relative"
-        ref={elementRef}
-      >
-        {finallyOutputs?.map(item => (
-          <ItemBadge item={item} size="xs" />
-        ))}
-        {showDropdown && (
-          <div className="absolute right-0 top-0 flex items-center">
-            <div
-              className="w-[93px] h-[20px]"
-              style={{
-                background:
-                  'linear-gradient(90deg, rgba(255, 255, 255, 0) 0px, rgb(252, 252, 255) 78%)',
-              }}
-            ></div>
-            <div className="bg-[#F2F5FE] flex items-center justify-center rounded overflow-hidden absolute right-0 top-[2px]">
-              <Dropdown menu={{ items }} placement="bottomRight">
-                <img
-                  src={dotSvg}
-                  className="w-4 h-4 cursor-pointer hover:bg-[#DDE3F1] rounded"
-                  alt=""
-                />
-              </Dropdown>
-            </div>
+    const finallyOutputs = useMemo(() => {
+      return [...outputs, ...exceptionHandlingOutput];
+    }, [outputs, exceptionHandlingOutput]);
+
+    const items = [
+      {
+        key: '1',
+        label: (
+          <div className="p-1 w-[300px] flex items-center gap-1 flex-wrap">
+            {finallyOutputs?.map(item => (
+              <ItemBadge item={item} size="base" />
+            ))}
           </div>
-        )}
-      </div>
-    </>
-  );
-});
+        ),
+      },
+    ];
+
+    useEffect(() => {
+      if (elementRef.current) {
+        const hasOverflow =
+          elementRef.current.scrollHeight > elementRef.current.clientHeight ||
+          elementRef.current.scrollWidth > elementRef.current.clientWidth;
+        setShowDropdown(hasOverflow);
+      }
+    }, [finallyOutputs]);
+
+    return (
+      <>
+        <div className="text-xs text-[#333] text-right self-center">
+          {label}
+        </div>
+        <div
+          className="flex items-center gap-1.5 overflow-hidden relative"
+          ref={elementRef}
+        >
+          {finallyOutputs?.map(item => (
+            <ItemBadge item={item} size="xs" />
+          ))}
+          {showDropdown && (
+            <div className="absolute right-0 top-0 flex items-center">
+              <div
+                className="w-[93px] h-[20px]"
+                style={{
+                  background:
+                    'linear-gradient(90deg, rgba(255, 255, 255, 0) 0px, rgb(252, 252, 255) 78%)',
+                }}
+              ></div>
+              <div className="bg-[#F2F5FE] flex items-center justify-center rounded overflow-hidden absolute right-0 top-[2px]">
+                <Dropdown menu={{ items }} placement="bottomRight">
+                  <img
+                    src={dotSvg}
+                    className="w-4 h-4 cursor-pointer hover:bg-[#DDE3F1] rounded"
+                    alt=""
+                  />
+                </Dropdown>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+);
 
 export const Label = memo(
-  ({ data, id, maxWidth = 130, labelInput = 'labelInput' }) => {
+  ({
+    data,
+    id,
+    maxWidth = 130,
+    labelInput = 'labelInput',
+  }: NodeComponentProps & { maxWidth?: number; labelInput?: string }) => {
     const { isStartOrEndNode } = useNodeCommon({ id, data });
     const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
     const autoSaveCurrentFlow = useFlowsManager(
@@ -273,7 +313,7 @@ export const Label = memo(
       state => state.updateNodeNameStatus
     );
 
-    const handleChangeNodeParam = useCallback(
+    const handleChangeNodeParam = useCallback<ChangeNodeParameter>(
       (fn, value) => {
         setNode(id, old => {
           fn(old.data, value);
@@ -331,7 +371,7 @@ export const Label = memo(
   }
 );
 
-export const ExceptionContent = memo(({ id, data }) => {
+export const ExceptionContent = memo(({ id, data }: NodeComponentProps) => {
   const { t } = useTranslation();
   const { isConnectable, exceptionHandleId } = useNodeCommon({ id, data });
 
@@ -359,7 +399,7 @@ export const ExceptionContent = memo(({ id, data }) => {
   );
 });
 
-export const Model = memo(({ model }) => {
+export const Model = memo(({ model }: NodePropsFor<'model'>) => {
   const { t } = useTranslation();
   return (
     <>
@@ -374,18 +414,11 @@ export const Model = memo(({ model }) => {
   );
 });
 
-interface IteratorChildNodeProps {
-  label: string;
-  isConnectable: boolean;
-  hasTargetHandle?: boolean;
-  hasSourceHandle?: boolean;
-  sourceHandleId?: string;
-  nodeId?: string;
-}
+interface IteratorChildNodeProps extends NodeComponentProps {}
 
 // 迭代器子节点组件
 export const IteratorChildNode = memo<IteratorChildNodeProps>(
-  ({ id, data }) => {
+  ({ id, data }: NodePropsFor<'id' | 'data'>) => {
     const { isConnectable, isIteratorStart, isIteratorEnd } = useNodeCommon({
       id,
       data,
@@ -408,162 +441,198 @@ export const IteratorChildNode = memo<IteratorChildNodeProps>(
   }
 );
 
-interface NodeHeaderProps {
-  id: string;
-  data: unknown;
-}
+interface NodeHeaderProps extends NodeComponentProps {}
 
 // 节点头部组件
-export const NodeHeader = memo<NodeHeaderProps>(({ id, data }) => {
-  const { hasTargetHandle, hasSourceHandle, isConnectable, sourceHandleId } =
-    useNodeCommon({
-      id,
-      data,
-    });
+export const NodeHeader = memo<NodeHeaderProps>(
+  ({ id, data }: NodePropsFor<'id' | 'data'>) => {
+    const { hasTargetHandle, hasSourceHandle, isConnectable, sourceHandleId } =
+      useNodeCommon({
+        id,
+        data,
+      });
 
-  const { renderTypeOneClickUpdate, nodeIcon, showNodeOperation } =
-    useNodeCommon({
-      id,
-      data,
-    });
+    const { renderTypeOneClickUpdate, nodeIcon, showNodeOperation } =
+      useNodeCommon({
+        id,
+        data,
+      });
 
-  return (
-    <div className="w-full flex items-center justify-between px-[14px] relative pt-[14px]">
-      <div className="flex items-center gap-3">
-        <img src={nodeIcon} className="w-[18px] h-[18px]" alt="" />
-        <Label id={id} data={data} />
-        {renderTypeOneClickUpdate()}
+    return (
+      <div className="w-full flex items-center justify-between px-[14px] relative pt-[14px]">
+        <div className="flex items-center gap-3">
+          <img src={nodeIcon} className="w-[18px] h-[18px]" alt="" />
+          <Label id={id} data={data} />
+          {renderTypeOneClickUpdate()}
+        </div>
+        {showNodeOperation && (
+          <NodeOperation id={id} data={data} labelInput="labelInput" />
+        )}
+        {hasTargetHandle && <TargetHandle isConnectable={isConnectable} />}
+        {hasSourceHandle && (
+          <SourceHandle
+            id={sourceHandleId}
+            nodeId={id}
+            isConnectable={isConnectable}
+          />
+        )}
       </div>
-      {showNodeOperation && (
-        <NodeOperation id={id} data={data} labelInput="labelInput" />
-      )}
-      {hasTargetHandle && <TargetHandle isConnectable={isConnectable} />}
-      {hasSourceHandle && (
-        <SourceHandle
-          id={sourceHandleId}
-          nodeId={id}
-          isConnectable={isConnectable}
-        />
-      )}
-    </div>
-  );
-});
+    );
+  }
+);
 
-interface NodeContentProps {
-  id: string;
-  data: unknown;
-}
+interface NodeContentProps extends NodeComponentProps {}
 
 // 节点内容组件
-export const NodeContent = memo<NodeContentProps>(({ id, data }) => {
-  const {
-    model,
-    isKnowledgeNode,
-    isQuestionAnswerNode,
-    isDecisionMakingNode,
-    isIfElseNode,
-    isIteratorNode,
-    isLoopNode,
-    isAgentNode,
-    showInputs,
-    showOutputs,
-    showExceptionFlow,
-    inputLabel,
-    outputLabel,
-  } = useNodeCommon({
-    id,
-    data,
-  });
+export const NodeContent = memo<NodeContentProps>(
+  ({ id, data }: NodePropsFor<'id' | 'data'>) => {
+    const {
+      model,
+      isKnowledgeNode,
+      isQuestionAnswerNode,
+      isDecisionMakingNode,
+      isIfElseNode,
+      isIteratorNode,
+      isLoopNode,
+      isAgentNode,
+      showInputs,
+      showOutputs,
+      showExceptionFlow,
+      inputLabel,
+      outputLabel,
+    } = useNodeCommon({
+      id,
+      data,
+    });
 
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'auto minmax(0, 1fr)',
-        gap: '6px',
-        fontSize: 12,
-        marginTop: 8,
-        padding: '0 14px',
-      }}
-    >
-      {showInputs && <Inputs inputs={data?.inputs} label={inputLabel} />}
-      {showOutputs && (
-        <Outputs outputs={data?.outputs} data={data} label={outputLabel} />
-      )}
-      {model && <Model model={model} />}
-      {isKnowledgeNode && (
-        <Knowledge data={data} repoList={data?.nodeParam?.repoList} />
-      )}
-      {isQuestionAnswerNode && <QuestionAnswer id={id} data={data} />}
-      {isDecisionMakingNode && <DecisionMaking id={id} data={data} />}
-      {isIfElseNode && <IfElse id={id} data={data} />}
-      {isIteratorNode && <Iterator id={id} data={data} />}
-      {isLoopNode && <Loop id={id} data={data} />}
-      {isAgentNode && <Agent id={id} data={data} />}
-      {showExceptionFlow && <ExceptionContent id={id} data={data} />}
-    </div>
-  );
-});
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'auto minmax(0, 1fr)',
+          gap: '6px',
+          fontSize: 12,
+          marginTop: 8,
+          padding: '0 14px',
+        }}
+      >
+        {showInputs && <Inputs inputs={data?.inputs} label={inputLabel} />}
+        {showOutputs && (
+          <Outputs outputs={data?.outputs} data={data} label={outputLabel} />
+        )}
+        {model && <Model model={model} />}
+        {isKnowledgeNode && (
+          <Knowledge data={data} repoList={data?.nodeParam?.repoList} />
+        )}
+        {isQuestionAnswerNode && <QuestionAnswer id={id} data={data} />}
+        {isDecisionMakingNode && <DecisionMaking id={id} data={data} />}
+        {isIfElseNode && <IfElse id={id} data={data} />}
+        {isIteratorNode && <Iterator id={id} />}
+        {isLoopNode && <Loop id={id} />}
+        {isAgentNode && <Agent id={id} data={data} />}
+        {showExceptionFlow && <ExceptionContent id={id} data={data} />}
+      </div>
+    );
+  }
+);
 
-interface NodeWrapperProps {
-  id: string;
-  data: unknown;
+interface NodeWrapperProps extends NodeComponentProps {
   children: React.ReactNode;
   className?: string;
 }
 
 // 节点包装器组件
-export const NodeWrapper = memo<NodeWrapperProps>(({ id, data, children }) => {
-  const { handleNodeClick, isIteratorNode, isLoopNode } = useNodeCommon({
-    id,
-    data,
-  });
+export const NodeWrapper = memo<NodeWrapperProps>(
+  ({ id, data, children }: NodePropsFor<'id' | 'data' | 'children'>) => {
+    const { handleNodeClick, isIteratorNode, isLoopNode } = useNodeCommon({
+      id,
+      data,
+    });
 
-  return (
-    <div
-      id={id}
-      className="min-w-[360px] pb-[14px]"
-      onClick={handleNodeClick}
-      style={{
-        maxWidth: isIteratorNode || isLoopNode ? '' : '360px',
-      }}
-    >
-      {data?.nodeParam?.remarkVisible && <Remark id={id} data={data} />}
-      {data.status && (
-        <NodeDebuggingStatus
-          id={id}
-          status={data.status}
-          debuggerResult={data.debuggerResult}
-        />
-      )}
-      {children}
-    </div>
-  );
-});
+    return (
+      <div
+        id={id}
+        className="min-w-[360px] pb-[14px]"
+        onClick={handleNodeClick}
+        style={{
+          maxWidth: isIteratorNode || isLoopNode ? '' : '360px',
+        }}
+      >
+        {data?.nodeParam?.remarkVisible && <Remark id={id} data={data} />}
+        {data.status && (
+          <NodeDebuggingStatus
+            id={id}
+            status={data.status}
+            debuggerResult={data.debuggerResult}
+          />
+        )}
+        {children}
+      </div>
+    );
+  }
+);
 
-export const ModelSection = memo(({ id, data }): React.ReactElement => {
-  const { t } = useTranslation();
+export const ModelSection = memo(
+  ({ id, data }: NodeComponentProps): React.ReactElement => {
+    const { t } = useTranslation();
+    return (
+      <FLowCollapse
+        label={
+          <h2 className="text-base font-medium">
+            {t('workflow.nodes.largeModelNode.model')}
+          </h2>
+        }
+        content={
+          <div className="rounded-md px-[18px] pb-3">
+            <ModelSelect id={id} data={data} />
+          </div>
+        }
+      />
+    );
+  }
+);
+
+interface DebugInputParameter extends Omit<RefInput, 'id'> {
+  schema?: { type?: string };
+  description?: string;
+}
+
+type DebugInputActions = Pick<
+  UseSingleNodeDebuggingReturn,
+  'uploadComplete' | 'handleFileUpload' | 'handleDeleteFile'
+> & {
+  handleChangeParam: <Value>(
+    index: number,
+    update: (data: { default?: unknown }, value: Value) => void,
+    value: Value
+  ) => void;
+};
+
+function isUploadFileItem(value: unknown): value is UploadFileItem {
   return (
-    <FLowCollapse
-      label={
-        <h2 className="text-base font-medium">
-          {t('workflow.nodes.largeModelNode.model')}
-        </h2>
-      }
-      content={
-        <div className="rounded-md px-[18px] pb-3">
-          <ModelSelect id={id} data={data} />
-        </div>
-      }
-    />
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    'name' in value &&
+    typeof value.name === 'string' &&
+    'size' in value &&
+    typeof value.size === 'number' &&
+    'loading' in value &&
+    typeof value.loading === 'boolean'
   );
-});
+}
 
 const UploadedFile = ({
   params,
   file,
   index,
   handleDeleteFile,
+}: {
+  params: DebugInputParameter;
+  file: UploadFileItem;
+  index: number;
+  handleDeleteFile: DebugInputActions['handleDeleteFile'];
 }): React.ReactElement => {
   return (
     <div
@@ -599,34 +668,37 @@ const UploadedFile = ({
   );
 };
 
-const getMaxSize = (fileType: string): number => {
+const getMaxSize = (fileType: string | undefined): number => {
   if (fileType === 'image') return 3;
   if (fileType === 'video') return 500;
   return 50;
 };
 
 const renderFileUpload = (
-  params,
-  index,
-  uploadComplete,
-  handleFileUpload,
-  handleDeleteFile
+  params: DebugInputParameter,
+  index: number,
+  uploadComplete: DebugInputActions['uploadComplete'],
+  handleFileUpload: DebugInputActions['handleFileUpload'],
+  handleDeleteFile: DebugInputActions['handleDeleteFile']
 ): React.ReactElement => {
   const multiple = params?.schema?.type === 'array-string';
   return (
     <>
       <FlowUpload
-        {...({
+        {...{
           multiple,
-          uploadType: generateUploadType(params?.fileType),
+          uploadType: generateUploadType(params.fileType ?? ''),
           uploadComplete: (event, fileId) =>
             uploadComplete(event, index, fileId),
           handleFileUpload: (file, fileId) =>
             handleFileUpload(file, index, multiple, fileId),
           maxSize: getMaxSize(params?.fileType),
-        } as unknown)}
+        }}
       />
-      {params?.default?.map(file => (
+      {(Array.isArray(params.default)
+        ? params.default.filter(isUploadFileItem)
+        : []
+      ).map(file => (
         <UploadedFile
           params={params}
           file={file}
@@ -638,7 +710,11 @@ const renderFileUpload = (
   );
 };
 
-const renderString = (params, index, handleChangeParam): React.ReactElement => {
+const renderString = (
+  params: DebugInputParameter,
+  index: number,
+  handleChangeParam: DebugInputActions['handleChangeParam']
+): React.ReactElement => {
   return (
     <FlowTextArea
       style={{
@@ -648,7 +724,7 @@ const renderString = (params, index, handleChangeParam): React.ReactElement => {
       }}
       adaptiveHeight={true}
       placeholder={params?.description || '请输入'}
-      value={params?.default}
+      value={typeof params.default === 'string' ? params.default : ''}
       onChange={e =>
         handleChangeParam(
           index,
@@ -661,8 +737,11 @@ const renderString = (params, index, handleChangeParam): React.ReactElement => {
           e.preventDefault();
           handleChangeParam(
             index,
-            d => (d.default = params?.default + '\t'),
-            params?.default + '\t'
+            d =>
+              (d.default =
+                (typeof params.default === 'string' ? params.default : '') +
+                '\t'),
+            (typeof params.default === 'string' ? params.default : '') + '\t'
           );
         }
       }}
@@ -671,14 +750,14 @@ const renderString = (params, index, handleChangeParam): React.ReactElement => {
 };
 
 const renderInteger = (
-  params,
-  index,
-  handleChangeParam
+  params: DebugInputParameter,
+  index: number,
+  handleChangeParam: DebugInputActions['handleChangeParam']
 ): React.ReactElement => (
   <FlowInputNumber
     step={1}
     precision={0}
-    value={params?.default}
+    value={typeof params.default === 'number' ? params.default : null}
     className="pt-0.5 w-full"
     onChange={value =>
       handleChangeParam(index, d => (d.default = value), value)
@@ -686,9 +765,13 @@ const renderInteger = (
   />
 );
 
-const renderNumber = (params, index, handleChangeParam): React.ReactElement => (
+const renderNumber = (
+  params: DebugInputParameter,
+  index: number,
+  handleChangeParam: DebugInputActions['handleChangeParam']
+): React.ReactElement => (
   <FlowInputNumber
-    value={params?.default}
+    value={typeof params.default === 'number' ? params.default : null}
     className="pt-0.5 w-full"
     onChange={value =>
       handleChangeParam(index, d => (d.default = value), value)
@@ -697,29 +780,39 @@ const renderNumber = (params, index, handleChangeParam): React.ReactElement => (
 );
 
 const renderBoolean = (
-  params,
-  index,
-  handleChangeParam
+  params: DebugInputParameter,
+  index: number,
+  handleChangeParam: DebugInputActions['handleChangeParam']
 ): React.ReactElement => (
   <FlowSelect
-    value={params?.default}
+    value={
+      typeof params.default === 'boolean' ? String(params.default) : undefined
+    }
     options={[
-      { label: 'true', value: true },
-      { label: 'false', value: false },
+      { label: 'true', value: 'true' },
+      { label: 'false', value: 'false' },
     ]}
     onChange={value =>
-      handleChangeParam(index, d => (d.default = value), value)
+      handleChangeParam(
+        index,
+        d => (d.default = value === 'true'),
+        value === 'true'
+      )
     }
   />
 );
 
 const renderJsonEditor = (
-  params,
-  index,
-  handleChangeParam
+  params: DebugInputParameter,
+  index: number,
+  handleChangeParam: DebugInputActions['handleChangeParam']
 ): React.ReactElement => (
   <JsonMonacoEditor
-    value={params?.default}
+    value={
+      typeof params.default === 'string'
+        ? params.default
+        : JSON.stringify(params.default)
+    }
     onChange={value =>
       handleChangeParam(index, d => (d.default = value), value)
     }
@@ -727,9 +820,9 @@ const renderJsonEditor = (
 );
 
 export const renderParamInput = (
-  params: unknown,
+  params: DebugInputParameter,
   index: number,
-  fnc
+  fnc: DebugInputActions
 ): React.ReactElement | null => {
   const {
     handleChangeParam,

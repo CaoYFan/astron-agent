@@ -1,3 +1,9 @@
+import type {
+  WorkflowNode,
+  WorkflowInput,
+  WorkflowOutput,
+  WorkflowNodeData,
+} from '../types/domain';
 import { useCallback } from 'react';
 import { cloneDeep } from 'lodash';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
@@ -7,6 +13,9 @@ import { UseVariableMemoryHandlersReturn } from '../types/hooks';
 export function useVariableMemoryHandlers({
   id,
   currentNodes,
+}: {
+  id: string;
+  currentNodes: WorkflowNode[];
 }): UseVariableMemoryHandlersReturn {
   const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
   const currentStore = getCurrentStore();
@@ -34,7 +43,7 @@ export function useVariableMemoryHandlers({
 
   /** 移除 variable-memory 节点的 ref */
   const removeVariableMemoryNodeRef = useCallback(
-    outputId => {
+    (outputId: string) => {
       const variableMemoryNodeIds = currentNodes
         ?.filter(
           node =>
@@ -65,7 +74,7 @@ export function useVariableMemoryHandlers({
   );
 
   // 判断 currentInput 是否有效
-  const isValidInput = (input): boolean | string | {} => {
+  const isValidInput = (input: WorkflowInput): boolean => {
     if (!input?.name) return false;
     const { type, content } = input?.schema?.value || {};
     if (type === 'literal') return !!content;
@@ -74,7 +83,10 @@ export function useVariableMemoryHandlers({
   };
 
   // 更新 output
-  const updateOutputFromInput = (output, currentInput): void => {
+  const updateOutputFromInput = (
+    output: WorkflowOutput,
+    currentInput: WorkflowInput
+  ): void => {
     if (!isValidInput(currentInput)) {
       output.name = '';
       output.schema.type = '';
@@ -88,7 +100,10 @@ export function useVariableMemoryHandlers({
     output.refId = currentInput?.id || '';
   };
 
-  const findCurrentInput = (nodes, output) => {
+  const findCurrentInput = (
+    nodes: WorkflowNode[],
+    output: WorkflowOutput
+  ): WorkflowInput | undefined => {
     const setterInputs =
       nodes
         ?.filter(
@@ -106,13 +121,21 @@ export function useVariableMemoryHandlers({
 
   /** 修改输入参数（支持 name / type / value / ref） */
   const handleChangeParam = useCallback(
-    (outputId, fn, value) => {
+    <Value>(
+      outputId: string,
+      fn: (
+        data: WorkflowInput,
+        value: Value,
+        nodeData: WorkflowNodeData
+      ) => void,
+      value: Value
+    ) => {
       // 更新当前节点输入
       setNode(id, old => {
         const currentInput = old.data?.inputs.find(
           item => item?.id === outputId
         );
-        fn(currentInput, value);
+        if (currentInput) fn(currentInput, value, old.data);
         return { ...cloneDeep(old) };
       });
 
@@ -144,11 +167,11 @@ export function useVariableMemoryHandlers({
 
   /** 删除输入行 */
   const handleRemoveInputLine = useCallback(
-    inputId => {
+    (inputId: string) => {
       takeSnapshot();
       setNode(id, old => {
         const index = old.data.inputs?.findIndex(item => item.id === inputId);
-        old.data.inputs.splice(index, 1);
+        if (index >= 0) old.data.inputs.splice(index, 1);
         return { ...cloneDeep(old) };
       });
       canPublishSetNot();

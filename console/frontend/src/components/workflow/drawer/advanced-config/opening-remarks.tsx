@@ -13,6 +13,11 @@ function OpeningRemarksModal({
   setConversationStarter,
   currentRobot,
   isFlow = false,
+}: {
+  setOpeningRemarksModal: (open: boolean) => void;
+  setConversationStarter: (text: string) => void;
+  currentRobot: { id?: string | number };
+  isFlow?: boolean;
 }): React.ReactElement {
   const controllerRef = useRef<AbortController | null>(null);
   const textQueue = useRef<string[]>([]);
@@ -107,7 +112,9 @@ function OpeningRemarksModal({
       textQueue.current = [];
     }
 
-    return (): void => clearInterval(timer);
+    return (): void => {
+      if (timer) clearInterval(timer);
+    };
   }, [optimizationOpeningRemarks, isReciving]);
 
   function handleOk(): void {

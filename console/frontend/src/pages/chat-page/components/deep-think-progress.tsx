@@ -44,7 +44,7 @@ const DeepThinkProgress: React.FC<{
         </div>
         <div className="pt-1 pb-2.5 min-h-10 reasoning-markdown">
           <MarkdownRender
-            content={answerItem?.reasoning}
+            content={answerItem?.reasoning ?? ''}
             isSending={!thinkComplete}
           />
         </div>

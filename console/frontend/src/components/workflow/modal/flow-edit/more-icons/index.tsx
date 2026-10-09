@@ -1,5 +1,14 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Button, Upload, Slider, Input, message, Spin } from 'antd';
+import {
+  Button,
+  Upload,
+  Slider,
+  Input,
+  message,
+  Spin,
+  type UploadProps,
+} from 'antd';
+import type { AvatarType } from '@/types/resource';
 import { avatarImageGenerate } from '@/services/common';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
 
@@ -12,7 +21,43 @@ import close from '@/assets/imgs/workflow/modal-close.png';
 
 const { Dragger } = Upload;
 
-function Image(props): React.ReactElement {
+type AvatarChoice = Pick<AvatarType, 'name' | 'value'> & Partial<AvatarType>;
+type AvatarOption = AvatarType & { code?: string };
+type ImageInfo = { downloadLink: string; s3Key: string };
+type UploadResponse = { code: number; data?: ImageInfo; message?: string };
+interface MoreIconsProps {
+  icons: AvatarOption[];
+  colors: AvatarType[];
+  botIcon: AvatarChoice;
+  setBotIcon: (icon: AvatarChoice) => void;
+  botColor?: string;
+  setBotColor: (color: string) => void;
+  setShowModal: (show: boolean) => void;
+  isFlow?: boolean;
+}
+interface AvatarContext extends MoreIconsProps {
+  avatarFilterGenerationMethods: typeof avatarGenerationMethods;
+  activeTab: string;
+  hoverTab: string;
+  setActiveTab: (tab: string) => void;
+  setHoverTab: (tab: string) => void;
+  previewIcon: AvatarChoice;
+  previewColor: string;
+  setPreviewIcon: (icon: AvatarChoice) => void;
+  setPreviewColor: (color: string) => void;
+  uploadImageObject: ImageInfo;
+  uploadProps: UploadProps<UploadResponse>;
+  generateImageObject: ImageInfo;
+  loading: boolean;
+  setGenerateImageDescription: (description: string) => void;
+  generateImage: () => void;
+  generateImageDescription: string;
+}
+
+function Image(props: {
+  imageUrl: string;
+  uploadProps: UploadProps<UploadResponse>;
+}): React.ReactElement {
   const { imageUrl, uploadProps } = props;
 
   const [scale, setScale] = useState(1);
@@ -91,7 +136,15 @@ const TabHeader = ({
   hoverTab,
   setHoverTab,
   setActiveTab,
-}): React.ReactElement => {
+}: Pick<
+  AvatarContext,
+  | 'setShowModal'
+  | 'avatarFilterGenerationMethods'
+  | 'activeTab'
+  | 'hoverTab'
+  | 'setHoverTab'
+  | 'setActiveTab'
+>): React.ReactElement => {
   return (
     <>
       <div className="text-second text-base font-semibold mb-4 flex items-center justify-between">
@@ -137,7 +190,16 @@ const AvatarGallery = ({
   setPreviewIcon,
   setPreviewColor,
   colors,
-}): React.ReactElement | null => {
+}: Pick<
+  AvatarContext,
+  | 'activeTab'
+  | 'icons'
+  | 'previewIcon'
+  | 'previewColor'
+  | 'setPreviewIcon'
+  | 'setPreviewColor'
+  | 'colors'
+>): React.ReactElement | null => {
   if (activeTab !== 'gallery') return null;
   return (
     <>
@@ -156,7 +218,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={(item.name ?? '') + (item.value ?? '')}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -174,7 +240,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={(item.name ?? '') + (item.value ?? '')}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -192,7 +262,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={(item.name ?? '') + (item.value ?? '')}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -210,7 +284,11 @@ const AvatarGallery = ({
                 }}
                 onClick={() => setPreviewIcon(item)}
               >
-                <img src={item.name + item.value} className="w-8 h-8" alt="" />
+                <img
+                  src={(item.name ?? '') + (item.value ?? '')}
+                  className="w-8 h-8"
+                  alt=""
+                />
               </div>
             ))}
         </div>
@@ -223,7 +301,7 @@ const AvatarGallery = ({
           <div
             key={index}
             className={`w-[40px] h-[40px] flex justify-center items-center ${item.name === previewColor ? 'color-item-active' : ''} cursor-pointer`}
-            onClick={() => setPreviewColor(item.name)}
+            onClick={() => setPreviewColor(item.name ?? '')}
           >
             <span
               className="w-[30px] h-[30px] rounded-lg"
@@ -240,7 +318,10 @@ const AvatarUpload = ({
   activeTab,
   uploadImageObject,
   uploadProps,
-}): React.ReactElement | null => {
+}: Pick<
+  AvatarContext,
+  'activeTab' | 'uploadImageObject' | 'uploadProps'
+>): React.ReactElement | null => {
   if (activeTab !== 'upload') return null;
   return (
     <div className="mt-8">
@@ -273,7 +354,15 @@ const AvatarAIChat = ({
   setGenerateImageDescription,
   generateImage,
   generateImageDescription,
-}): React.ReactElement | null => {
+}: Pick<
+  AvatarContext,
+  | 'activeTab'
+  | 'generateImageObject'
+  | 'loading'
+  | 'setGenerateImageDescription'
+  | 'generateImage'
+  | 'generateImageDescription'
+>): React.ReactElement | null => {
   if (activeTab !== 'chat') return null;
   return (
     <div className="mt-6">
@@ -318,7 +407,7 @@ const AvatarAIChat = ({
   );
 };
 
-function index(props): React.ReactElement {
+function index(props: MoreIconsProps): React.ReactElement {
   const {
     icons,
     colors,
@@ -329,10 +418,13 @@ function index(props): React.ReactElement {
     setShowModal,
   } = props;
 
-  const [previewIcon, setPreviewIcon] = useState<unknown>({});
+  const [previewIcon, setPreviewIcon] = useState<AvatarChoice>({
+    name: '',
+    value: '',
+  });
   const [previewColor, setPreviewColor] = useState('');
-  const [activeTab, setActiveTab] = useState<string | undefined>('upload');
-  const [hoverTab, setHoverTab] = useState<string | undefined>('');
+  const [activeTab, setActiveTab] = useState('upload');
+  const [hoverTab, setHoverTab] = useState('');
   const [uploadImageObject, setUploadImageObject] = useState({
     downloadLink: '',
     s3Key: '',
@@ -349,8 +441,8 @@ function index(props): React.ReactElement {
       setPreviewIcon({ ...botIcon });
       setPreviewColor(botColor);
     } else {
-      setPreviewIcon(icons[0]);
-      setPreviewColor(colors[0].name);
+      if (icons[0]) setPreviewIcon(icons[0]);
+      setPreviewColor(colors[0]?.name ?? '');
     }
   }, []);
 
@@ -363,7 +455,21 @@ function index(props): React.ReactElement {
     setLoading(true);
     avatarImageGenerate(generateImageDescription)
       .then(data => {
-        setGenerateImageObject(data);
+        if (
+          typeof data !== 'object' ||
+          data === null ||
+          !('downloadLink' in data) ||
+          !('s3Key' in data) ||
+          typeof data.downloadLink !== 'string' ||
+          typeof data.s3Key !== 'string'
+        ) {
+          message.error('图片生成返回结果格式不正确');
+          return;
+        }
+        setGenerateImageObject({
+          downloadLink: data.downloadLink,
+          s3Key: data.s3Key,
+        });
       })
       .finally(() => setLoading(false));
   }
@@ -379,7 +485,7 @@ function index(props): React.ReactElement {
     setShowModal(false);
   }
 
-  function beforeUpload(file): boolean {
+  function beforeUpload(file: File): boolean {
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       message.error('上传文件大小不能超出2M！');
@@ -393,7 +499,7 @@ function index(props): React.ReactElement {
       'webp',
       'bmp',
       'tiff',
-    ].includes(file.type.split('/').pop());
+    ].includes(file.type.split('/').pop() ?? '');
     if (!isJpgOrPng) {
       message.error('请上传JPG和PNG等格式的图片文件');
       return false;
@@ -402,7 +508,7 @@ function index(props): React.ReactElement {
     }
   }
 
-  const uploadProps = {
+  const uploadProps: UploadProps<UploadResponse> = {
     name: 'file',
     action: getFixedUrl('/image/upload'),
     headers: {
@@ -421,7 +527,7 @@ function index(props): React.ReactElement {
           const data = info.file.response.data;
           setUploadImageObject(data);
         } else {
-          message.error(info.file.response.message);
+          message.error(info.file.response?.message ?? '图片上传失败');
         }
       }
     },

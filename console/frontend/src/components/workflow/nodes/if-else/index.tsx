@@ -1,3 +1,46 @@
+import type { TFunction } from 'i18next';
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import {
+  inputReference,
+  changeReferencedInput,
+} from '@/components/workflow/nodes/types';
+import type {
+  WorkflowCondition,
+  WorkflowCase,
+  WorkflowInput,
+  WorkflowReference,
+} from '@/components/workflow/types/domain';
+
+type ChangeCondition = (
+  caseId: string,
+  index: number,
+  update: (condition: WorkflowCondition, value: string) => void,
+  value: string
+) => void;
+type IfElseContext = NodePropsFor<
+  | 'id'
+  | 'data'
+  | 'inputs'
+  | 'references'
+  | 'handleChangeInputParam'
+  | 'checkNode'
+  | 'canvasesDisabled'
+> & {
+  item: WorkflowCase;
+  condition: WorkflowCondition;
+  caseData: WorkflowCase;
+  cases: WorkflowCase[];
+  index: number;
+  caseIndex: number;
+  t: TFunction;
+  operatorRef: React.RefObject<HTMLDivElement>;
+  operatorId: string;
+  setOperatorId: React.Dispatch<React.SetStateAction<string>>;
+  handleConditionChange: ChangeCondition;
+};
+type IfElsePropsFor<Key extends keyof IfElseContext> = Pick<IfElseContext, Key>;
+
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, useEffect, useRef, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep } from 'lodash';
@@ -26,7 +69,9 @@ const OperatorDropdown = ({
   setOperatorId,
   id,
   t,
-}): React.ReactElement => {
+}: IfElsePropsFor<
+  'item' | 'operatorId' | 'setOperatorId' | 'id' | 't'
+>): React.ReactElement | null => {
   if (operatorId !== item?.id) return null;
   const { handleOperatorChange } = useIfElseCondition(id);
   return (
@@ -67,23 +112,29 @@ const LeftCascader = ({
   handleChangeInputParam,
   checkNode,
   id,
-}): React.ReactElement => {
-  const value = inputs?.find(input => input.id === condition.leftVarIndex)
-    ?.schema?.value?.content?.nodeId
-    ? [
-        inputs.find(input => input.id === condition.leftVarIndex)?.schema?.value
-          ?.content?.nodeId,
-        inputs.find(input => input.id === condition.leftVarIndex)?.schema?.value
-          ?.content?.name,
-      ]
-    : [];
+}: IfElsePropsFor<
+  | 'condition'
+  | 'inputs'
+  | 'references'
+  | 'handleChangeInputParam'
+  | 'checkNode'
+  | 'id'
+>): React.ReactElement => {
+  const reference = inputReference(
+    inputs.find(input => input.id === condition.leftVarIndex)
+  );
+  const value =
+    reference?.nodeId && reference.name
+      ? [reference.nodeId, reference.name]
+      : [];
 
   return (
     <FlowCascader
       value={value}
       options={references}
       handleTreeSelect={node => {
-        handleChangeInputParam(
+        changeReferencedInput(
+          handleChangeInputParam,
           condition.leftVarIndex,
           (data, value) => (data.schema.value.content = value),
           { id: node.id, nodeId: node.originId, name: node.value }
@@ -101,9 +152,16 @@ const OperatorSelect = ({
   id,
   checkNode,
   caseData,
-}): React.ReactElement => (
+}: IfElsePropsFor<
+  | 'condition'
+  | 'index'
+  | 'handleConditionChange'
+  | 'id'
+  | 'checkNode'
+  | 'caseData'
+>): React.ReactElement => (
   <FlowSelect
-    value={condition.compareOperator}
+    value={condition.compareOperator ?? undefined}
     onChange={value =>
       handleConditionChange(
         caseData?.id,
@@ -124,10 +182,17 @@ const RightInput = ({
   handleChangeInputParam,
   checkNode,
   id,
-}): React.ReactElement => {
+}: IfElsePropsFor<
+  | 'condition'
+  | 'inputs'
+  | 'references'
+  | 'handleChangeInputParam'
+  | 'checkNode'
+  | 'id'
+>): React.ReactElement => {
   const inputData = inputs?.find(input => input.id === condition.rightVarIndex);
   const disabled = ['not_null', 'null', 'empty', 'not_empty'].includes(
-    condition.compareOperator
+    condition.compareOperator ?? ''
   );
 
   if (inputData?.schema?.value?.type === 'literal') {
@@ -135,9 +200,14 @@ const RightInput = ({
       <FlowNodeInput
         nodeId={id}
         disabled={disabled}
-        value={inputData.schema.value.content}
+        value={
+          typeof inputData.schema.value.content === 'string'
+            ? inputData.schema.value.content
+            : JSON.stringify(inputData.schema.value.content)
+        }
         onChange={value =>
-          handleChangeInputParam(
+          changeReferencedInput(
+            handleChangeInputParam,
             condition.rightVarIndex,
             (data, value) => (data.schema.value.content = value),
             value
@@ -147,23 +217,23 @@ const RightInput = ({
     );
   }
 
-  const value = inputData?.schema?.value?.content?.nodeId
-    ? [
-        inputData.schema.value.content.nodeId,
-        inputData.schema.value.content.name,
-      ]
-    : [];
+  const reference = inputReference(inputData);
+  const value =
+    reference?.nodeId && reference.name
+      ? [reference.nodeId, reference.name]
+      : [];
 
   return (
     <FlowCascader
       value={value}
       options={references}
       handleTreeSelect={node => {
-        handleChangeInputParam(
+        changeReferencedInput(
+          handleChangeInputParam,
           condition.rightVarIndex,
           (data, value) => {
             data.schema.value.content = value.content;
-            data.schema.type = value.type;
+            data.schema.type = value.type ?? data.schema.type;
           },
           {
             content: { id: node.id, nodeId: node.originId, name: node.value },
@@ -176,7 +246,11 @@ const RightInput = ({
   );
 };
 
-const ErrorRow = ({ condition, inputs, index }): React.ReactElement => (
+const ErrorRow = ({
+  condition,
+  inputs,
+  index,
+}: IfElsePropsFor<'condition' | 'inputs' | 'index'>): React.ReactElement => (
   <div className="flex-1 flex items-center gap-2.5 text-xs overflow-hidden text-[#F74E43]">
     <div className="flex flex-col w-1/4">
       {
@@ -207,7 +281,16 @@ const ConditionRow = ({
   id,
   checkNode,
   caseData,
-}): React.ReactElement => {
+}: IfElsePropsFor<
+  | 'condition'
+  | 'index'
+  | 'inputs'
+  | 'references'
+  | 'handleChangeInputParam'
+  | 'id'
+  | 'checkNode'
+  | 'caseData'
+>): React.ReactElement => {
   const { t } = useTranslation();
   const { handleRemoveLine } = useIfElseLines(id);
   const { handleConditionChange } = useIfElseCondition(id);
@@ -242,7 +325,7 @@ const ConditionRow = ({
         <div className="flex-1">
           <FlowSelect
             disabled={['not_null', 'null', 'empty', 'not_empty'].includes(
-              condition.compareOperator
+              condition.compareOperator ?? ''
             )}
             value={
               inputs.find(input => input.id === condition.rightVarIndex)?.schema
@@ -253,11 +336,14 @@ const ConditionRow = ({
               { label: t('workflow.nodes.ifElseNode.reference'), value: 'ref' },
             ]}
             onChange={value =>
-              handleChangeInputParam(
+              changeReferencedInput(
+                handleChangeInputParam,
                 condition.rightVarIndex,
                 (data, value) => {
-                  data.schema.value.type = value;
-                  data.schema.value.content = value === 'literal' ? '' : {};
+                  data.schema.value =
+                    value === 'literal'
+                      ? { ...data.schema.value, type: 'literal', content: '' }
+                      : { ...data.schema.value, type: 'ref', content: {} };
                 },
                 value
               )
@@ -304,7 +390,21 @@ const CaseRow = ({
   id,
   checkNode,
   canvasesDisabled,
-}): React.ReactElement => {
+}: IfElsePropsFor<
+  | 'item'
+  | 'caseIndex'
+  | 'cases'
+  | 't'
+  | 'operatorRef'
+  | 'operatorId'
+  | 'setOperatorId'
+  | 'inputs'
+  | 'references'
+  | 'handleChangeInputParam'
+  | 'id'
+  | 'checkNode'
+  | 'canvasesDisabled'
+>): React.ReactElement => {
   const { handleRemoveCase } = useIfElseCases(id);
   const { handleAddLine } = useIfElseLines(id);
   return (
@@ -427,30 +527,7 @@ const CaseRow = ({
   );
 };
 
-const useIfElseCases = (
-  id: string
-): {
-  handleAddCase: () => void;
-  handleRemoveCase: (caseId: string) => void;
-  getLeftRef: (
-    condition: unknown,
-    inputs: unknown,
-    references: unknown
-  ) => {
-    leftLabel: string;
-    leftName: string;
-    leftRef: string;
-  };
-  getRightRef: (
-    condition: unknown,
-    inputs: unknown,
-    references: unknown
-  ) => {
-    rightLabel: string;
-    rightName: string;
-    rightRef: string;
-  };
-} => {
+const useIfElseCases = (id: string) => {
   const getCurrentStore = useFlowsManager(s => s.getCurrentStore);
   const currentStore = getCurrentStore();
   const setNode = currentStore(s => s.setNode);
@@ -467,7 +544,7 @@ const useIfElseCases = (
         ...(old.data?.inputs || []),
         {
           id: leftVarIndex,
-          name: 'input' + uuid().replaceAll('-', ''),
+          name: 'input' + uuid().replace(/-/g, ''),
           schema: {
             type: 'string',
             value: { type: 'ref', content: { nodeId: '', name: '' } },
@@ -475,16 +552,17 @@ const useIfElseCases = (
         },
         {
           id: rightVarIndex,
-          name: 'input' + uuid().replaceAll('-', ''),
+          name: 'input' + uuid().replace(/-/g, ''),
           schema: {
             type: 'string',
             value: { type: 'ref', content: { nodeId: '', name: '' } },
           },
         },
       ];
-      old.data.nodeParam.cases.splice(old.data.nodeParam.cases.length - 1, 0, {
+      const cases = old.data.nodeParam.cases ?? (old.data.nodeParam.cases = []);
+      cases.splice(Math.max(0, cases.length - 1), 0, {
         id: 'branch_one_of::' + uuid(),
-        level: old.data.nodeParam.cases.length,
+        level: cases.length,
         logicalOperator: 'and',
         conditions: [
           { id: uuid(), leftVarIndex, rightVarIndex, compareOperator: null },
@@ -498,7 +576,7 @@ const useIfElseCases = (
   const handleRemoveCase = useMemoizedFn((caseId: string) => {
     takeSnapshot();
     setNode(id, old => {
-      const currentCase = old?.data?.nodeParam?.cases.find(
+      const currentCase = old.data.nodeParam.cases?.find(
         item => item.id === caseId
       );
       const conditions = currentCase?.conditions || [];
@@ -509,12 +587,14 @@ const useIfElseCases = (
       old.data.inputs = old.data.inputs.filter(
         input => !needDeleteInputs.includes(input.id)
       );
-      old.data.nodeParam.cases = old.data.nodeParam.cases
+      old.data.nodeParam.cases = (old.data.nodeParam.cases ?? [])
         .filter(item => item.id !== caseId)
         .map((item, index) => ({
           ...item,
           level:
-            index === old.data.nodeParam.cases?.length - 2 ? 999 : index + 1,
+            index === (old.data.nodeParam.cases?.length ?? 0) - 2
+              ? 999
+              : index + 1,
         }));
       return { ...cloneDeep(old) };
     });
@@ -523,19 +603,23 @@ const useIfElseCases = (
   });
 
   // helpers.ts
-  const getInputById = useMemoizedFn((inputs, id) => {
-    return inputs?.find(input => input.id === id);
-  });
+  const getInputById = useMemoizedFn(
+    (inputs: WorkflowInput[], id: string | undefined) => {
+      return inputs?.find(input => input.id === id);
+    }
+  );
 
-  const getReferenceLabel = useMemoizedFn((references, nodeId) => {
-    return references?.find(ref => ref.value === nodeId)?.label;
-  });
+  const getReferenceLabel = useMemoizedFn(
+    (references: WorkflowReference[], nodeId: string | undefined): string => {
+      return references.find(ref => ref.value === nodeId)?.label ?? '';
+    }
+  );
 
   const getLeftRef = useMemoizedFn(
     (
-      condition,
-      inputs,
-      references
+      condition: WorkflowCondition,
+      inputs: WorkflowInput[],
+      references: WorkflowReference[]
     ): {
       leftLabel: string;
       leftName: string;
@@ -544,18 +628,18 @@ const useIfElseCases = (
       const leftInput = getInputById(inputs, condition.leftVarIndex);
       const leftLabel = getReferenceLabel(
         references,
-        leftInput?.schema?.value?.content?.nodeId
+        inputReference(leftInput)?.nodeId
       );
-      const leftName = leftInput?.schema?.value?.content?.name;
+      const leftName = inputReference(leftInput)?.name ?? '';
       return { leftLabel, leftName, leftRef: `${leftLabel} - ${leftName}` };
     }
   );
 
   const getRightRef = useMemoizedFn(
     (
-      condition,
-      inputs,
-      references
+      condition: WorkflowCondition,
+      inputs: WorkflowInput[],
+      references: WorkflowReference[]
     ): {
       rightLabel: string;
       rightName: string;
@@ -564,15 +648,17 @@ const useIfElseCases = (
       const rightInput = getInputById(inputs, condition.rightVarIndex);
       if (!rightInput) return { rightLabel: '', rightName: '', rightRef: '' };
 
-      const { type, content } = rightInput.schema?.value || {};
+      const { type, content } = rightInput.schema.value;
 
       if (type === 'literal') {
-        return { rightLabel: content, rightName: content, rightRef: content };
+        const text =
+          typeof content === 'string' ? content : JSON.stringify(content);
+        return { rightLabel: text, rightName: text, rightRef: text };
       }
 
       if (
         ['empty', 'not_empty', 'null', 'not_null'].includes(
-          condition.compareOperator
+          condition.compareOperator ?? ''
         )
       ) {
         const label =
@@ -585,7 +671,7 @@ const useIfElseCases = (
       }
 
       const rightLabel = getReferenceLabel(references, content?.nodeId);
-      const rightName = content?.name;
+      const rightName = content?.name ?? '';
       return {
         rightLabel,
         rightName,
@@ -597,12 +683,7 @@ const useIfElseCases = (
   return { handleAddCase, handleRemoveCase, getLeftRef, getRightRef };
 };
 
-const useIfElseLines = (
-  id: string
-): {
-  handleAddLine: (caseId: string) => void;
-  handleRemoveLine: (caseData: unknown, index: number) => void;
-} => {
+const useIfElseLines = (id: string) => {
   const getCurrentStore = useFlowsManager(s => s.getCurrentStore);
   const currentStore = getCurrentStore();
   const setNode = currentStore(s => s.setNode);
@@ -617,7 +698,7 @@ const useIfElseLines = (
       old.data.inputs.push(
         {
           id: leftVarIndex,
-          name: 'input' + uuid().replaceAll('-', ''),
+          name: 'input' + uuid().replace(/-/g, ''),
           schema: {
             type: 'string',
             value: { type: 'ref', content: { nodeId: '', name: '' } },
@@ -625,16 +706,17 @@ const useIfElseLines = (
         },
         {
           id: rightVarIndex,
-          name: 'input' + uuid().replaceAll('-', ''),
+          name: 'input' + uuid().replace(/-/g, ''),
           schema: {
             type: 'string',
             value: { type: 'ref', content: { nodeId: '', name: '' } },
           },
         }
       );
-      const currentCase = old.data.nodeParam.cases.find(
+      const currentCase = old.data.nodeParam.cases?.find(
         item => item.id === caseId
       );
+      if (!currentCase) return old;
       currentCase.conditions.push({
         id: uuid(),
         leftVarIndex,
@@ -646,252 +728,264 @@ const useIfElseLines = (
     canPublishSetNot();
   });
 
-  const handleRemoveLine = useMemoizedFn((caseData, index) => {
-    const leftVarIndex = caseData?.conditions?.[index]?.leftVarIndex;
-    const rightVarIndex = caseData?.conditions?.[index]?.rightVarIndex;
-    takeSnapshot();
-    setNode(id, old => {
-      old.data.inputs = old.data.inputs.filter(
-        input => input.id !== leftVarIndex && input.id !== rightVarIndex
-      );
-      const currentCase = old.data.nodeParam.cases.find(
-        item => item.id === caseData?.id
-      );
-      currentCase.conditions = currentCase.conditions.filter(
-        (_, i) => i !== index
-      );
-      return { ...cloneDeep(old) };
-    });
-    canPublishSetNot();
-  });
+  const handleRemoveLine = useMemoizedFn(
+    (caseData: WorkflowCase, index: number) => {
+      const leftVarIndex = caseData?.conditions?.[index]?.leftVarIndex;
+      const rightVarIndex = caseData?.conditions?.[index]?.rightVarIndex;
+      takeSnapshot();
+      setNode(id, old => {
+        old.data.inputs = old.data.inputs.filter(
+          input => input.id !== leftVarIndex && input.id !== rightVarIndex
+        );
+        const currentCase = old.data.nodeParam.cases?.find(
+          item => item.id === caseData?.id
+        );
+        if (!currentCase) return old;
+        currentCase.conditions = currentCase.conditions.filter(
+          (_, i) => i !== index
+        );
+        return { ...cloneDeep(old) };
+      });
+      canPublishSetNot();
+    }
+  );
 
   return { handleAddLine, handleRemoveLine };
 };
 
-const useIfElseCondition = (
-  id: string
-): {
-  handleConditionChange: (
-    caseId: string,
-    index: number,
-    fn: (condition: unknown, value: unknown) => void,
-    value: unknown
-  ) => void;
-  handleOperatorChange: (caseId: string, value: unknown) => void;
-} => {
+const useIfElseCondition = (id: string) => {
   const getCurrentStore = useFlowsManager(s => s.getCurrentStore);
   const currentStore = getCurrentStore();
   const setNode = currentStore(s => s.setNode);
   const autoSaveCurrentFlow = useFlowsManager(s => s.autoSaveCurrentFlow);
   const canPublishSetNot = useFlowsManager(s => s.canPublishSetNot);
 
-  const handleConditionChange = useMemoizedFn((caseId, index, fn, value) => {
-    setNode(id, old => {
-      const currentCase = old.data.nodeParam.cases.find(
-        item => item.id === caseId
-      );
-      const currentCondition = currentCase.conditions[index];
-      fn(currentCondition, value);
-      if (['not_null', 'null', 'empty', 'not_empty'].includes(value)) {
-        const currentInput = old.data.inputs.find(
-          input => input.id === currentCondition.rightVarIndex
+  const handleConditionChange = useMemoizedFn<ChangeCondition>(
+    (caseId, index, fn, value) => {
+      setNode(id, old => {
+        const currentCase = old.data.nodeParam.cases?.find(
+          item => item.id === caseId
         );
-        currentInput.schema.value.type = 'literal';
-        currentInput.schema.value.content = '';
-      }
-      return { ...cloneDeep(old) };
-    });
-    autoSaveCurrentFlow();
-    canPublishSetNot();
-  });
+        const currentCondition = currentCase?.conditions[index];
+        if (!currentCondition) return old;
+        fn(currentCondition, value);
+        if (['not_null', 'null', 'empty', 'not_empty'].includes(value)) {
+          const currentInput = old.data.inputs.find(
+            input => input.id === currentCondition.rightVarIndex
+          );
+          if (currentInput) {
+            currentInput.schema.value = {
+              ...currentInput.schema.value,
+              type: 'literal',
+              content: '',
+            };
+          }
+        }
+        return { ...cloneDeep(old) };
+      });
+      autoSaveCurrentFlow();
+      canPublishSetNot();
+    }
+  );
 
-  const handleOperatorChange = useMemoizedFn((caseId, value) => {
-    setNode(id, old => {
-      const currentCase = old.data.nodeParam.cases.find(
-        item => item.id === caseId
-      );
-      currentCase.logicalOperator = value;
-      return { ...cloneDeep(old) };
-    });
-    autoSaveCurrentFlow();
-  });
+  const handleOperatorChange = useMemoizedFn(
+    (caseId: string, value: string) => {
+      setNode(id, old => {
+        const currentCase = old.data.nodeParam.cases?.find(
+          item => item.id === caseId
+        );
+        if (!currentCase) return old;
+        currentCase.logicalOperator = value;
+        return { ...cloneDeep(old) };
+      });
+      autoSaveCurrentFlow();
+    }
+  );
 
   return { handleConditionChange, handleOperatorChange };
 };
 
-export const IfElseDetail = memo((props): React.ReactElement => {
-  const { id, data } = props;
-  const { handleChangeInputParam, references, inputs } = useNodeCommon({
-    id,
-    data,
-  });
-  const { handleAddCase } = useIfElseCases(id);
-  const { t } = useTranslation();
-  const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
-  const currentStore = getCurrentStore();
-  const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
-  const checkNode = currentStore(state => state.checkNode);
-  const operatorRef = useRef<HTMLDivElement | null>(null);
-  const [operatorId, setOperatorId] = useState('');
+export const IfElseDetail = memo(
+  (props: NodeComponentProps): React.ReactElement => {
+    const { id, data } = props;
+    const { handleChangeInputParam, references, inputs } = useNodeCommon({
+      id,
+      data,
+    });
+    const { handleAddCase } = useIfElseCases(id);
+    const { t } = useTranslation();
+    const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
+    const currentStore = getCurrentStore();
+    const canvasesDisabled = useFlowsManager(state => state.canvasesDisabled);
+    const checkNode = currentStore(state => state.checkNode);
+    const operatorRef = useRef<HTMLDivElement | null>(null);
+    const [operatorId, setOperatorId] = useState('');
 
-  useEffect((): void | (() => void) => {
-    function clickOutside(event: MouseEvent): void {
-      if (operatorRef.current && !operatorRef.current.contains(event.target)) {
-        setOperatorId('');
+    useEffect((): void | (() => void) => {
+      function clickOutside(event: MouseEvent): void {
+        if (
+          operatorRef.current &&
+          event.target instanceof Node &&
+          !operatorRef.current.contains(event.target)
+        ) {
+          setOperatorId('');
+        }
       }
-    }
-    document.body.addEventListener('click', clickOutside);
-    return (): void => {
-      document.body.removeEventListener('click', clickOutside);
-    };
-  }, []);
+      document.body.addEventListener('click', clickOutside);
+      return (): void => {
+        document.body.removeEventListener('click', clickOutside);
+      };
+    }, []);
 
-  const cases = useMemo(() => {
-    return data?.nodeParam?.cases || [];
-  }, [data]);
+    const cases = useMemo(() => {
+      return data?.nodeParam?.cases || [];
+    }, [data]);
 
-  return (
-    <div>
-      <div className="p-[14px] pb-[6px]">
-        <div className="bg-[#fff] rounded-lg">
-          <FLowCollapse
-            label={
-              <div className="text-base font-medium flex items-center justify-between">
-                <div>{t('workflow.nodes.ifElseNode.branch')}</div>
-                {!canvasesDisabled && (
-                  <div
-                    className="flex items-center cursor-pointer text-[#6356EA] text-xs font-medium gap-1"
-                    onClick={e => {
-                      e.stopPropagation();
-                      handleAddCase();
-                    }}
-                    style={{
-                      pointerEvents: canvasesDisabled ? 'none' : 'auto',
-                    }}
-                  >
-                    <img src={inputAddIcon} className="w-2.5 h-2.5" alt="" />
-                    <span>{t('workflow.nodes.ifElseNode.addBranch')}</span>
-                  </div>
-                )}
-              </div>
-            }
-            content={
-              <div className="flex flex-col gap-2.5">
-                {cases?.map((item, caseIndex) => (
-                  <CaseRow
-                    item={item}
-                    caseIndex={caseIndex}
-                    cases={cases}
-                    t={t}
-                    operatorRef={operatorRef}
-                    operatorId={operatorId}
-                    setOperatorId={setOperatorId}
-                    inputs={inputs}
-                    references={references}
-                    handleChangeInputParam={handleChangeInputParam}
-                    id={id}
-                    checkNode={checkNode}
-                    canvasesDisabled={canvasesDisabled}
-                  />
-                ))}
-              </div>
-            }
-          />
+    return (
+      <div>
+        <div className="p-[14px] pb-[6px]">
+          <div className="bg-[#fff] rounded-lg">
+            <FLowCollapse
+              label={
+                <div className="text-base font-medium flex items-center justify-between">
+                  <div>{t('workflow.nodes.ifElseNode.branch')}</div>
+                  {!canvasesDisabled && (
+                    <div
+                      className="flex items-center cursor-pointer text-[#6356EA] text-xs font-medium gap-1"
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleAddCase();
+                      }}
+                      style={{
+                        pointerEvents: canvasesDisabled ? 'none' : 'auto',
+                      }}
+                    >
+                      <img src={inputAddIcon} className="w-2.5 h-2.5" alt="" />
+                      <span>{t('workflow.nodes.ifElseNode.addBranch')}</span>
+                    </div>
+                  )}
+                </div>
+              }
+              content={
+                <div className="flex flex-col gap-2.5">
+                  {cases?.map((item, caseIndex) => (
+                    <CaseRow
+                      item={item}
+                      caseIndex={caseIndex}
+                      cases={cases}
+                      t={t}
+                      operatorRef={operatorRef}
+                      operatorId={operatorId}
+                      setOperatorId={setOperatorId}
+                      inputs={inputs}
+                      references={references}
+                      handleChangeInputParam={handleChangeInputParam}
+                      id={id}
+                      checkNode={checkNode}
+                      canvasesDisabled={canvasesDisabled}
+                    />
+                  ))}
+                </div>
+              }
+            />
+          </div>
         </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
-export const IfElse = memo(({ id, data }): React.ReactElement => {
-  const { t } = useTranslation();
-  const { isConnectable, inputs, references } = useNodeCommon({ id, data });
-  const { getLeftRef, getRightRef } = useIfElseCases(id);
+export const IfElse = memo(
+  ({ id, data }: NodeComponentProps): React.ReactElement => {
+    const { t } = useTranslation();
+    const { isConnectable, inputs, references } = useNodeCommon({ id, data });
+    const { getLeftRef, getRightRef } = useIfElseCases(id);
 
-  const cases = useMemo(() => {
-    return data?.nodeParam?.cases || [];
-  }, [data]);
+    const cases = useMemo(() => {
+      return data?.nodeParam?.cases || [];
+    }, [data]);
 
-  return (
-    <>
-      {cases?.map((item, caseIndex) => (
-        <>
-          <span>
-            {caseIndex === 0
-              ? t('workflow.nodes.ifElseNode.if')
-              : caseIndex === cases.length - 1
-                ? t('workflow.nodes.ifElseNode.else')
-                : t('workflow.nodes.ifElseNode.elseIf')}
-          </span>
-          <span className="relative pr-[14px] exception-handle-edge">
-            <div className="border border-solid py-1 rounded-mini text-xs coz-fg-primary min-h-[32px] rounded">
-              {item?.conditions?.map((condition, index) => {
-                const { leftLabel, leftName, leftRef } = getLeftRef(
-                  condition,
-                  inputs,
-                  references
-                );
-                const { rightLabel, rightName, rightRef } = getRightRef(
-                  condition,
-                  inputs,
-                  references
-                );
+    return (
+      <>
+        {cases?.map((item, caseIndex) => (
+          <>
+            <span>
+              {caseIndex === 0
+                ? t('workflow.nodes.ifElseNode.if')
+                : caseIndex === cases.length - 1
+                  ? t('workflow.nodes.ifElseNode.else')
+                  : t('workflow.nodes.ifElseNode.elseIf')}
+            </span>
+            <span className="relative pr-[14px] exception-handle-edge">
+              <div className="border border-solid py-1 rounded-mini text-xs coz-fg-primary min-h-[32px] rounded">
+                {item?.conditions?.map((condition, index) => {
+                  const { leftLabel, leftName, leftRef } = getLeftRef(
+                    condition,
+                    inputs,
+                    references
+                  );
+                  const { rightLabel, rightName, rightRef } = getRightRef(
+                    condition,
+                    inputs,
+                    references
+                  );
 
-                return (
-                  <div
-                    className="flex flex-col overflow-hidden"
-                    key={condition.id}
-                  >
-                    <div className="flex items-center px-1 overflow-hidden">
-                      {leftLabel && leftName ? (
-                        <div className="flex-1 flex-shrink-0 rounded bg-[#f2f3f8] px-2.5 py-1 overflow-hidden">
-                          <Tooltip title={leftRef}>
-                            <div className="text-overflow">{leftRef}</div>
-                          </Tooltip>
+                  return (
+                    <div
+                      className="flex flex-col overflow-hidden"
+                      key={condition.id}
+                    >
+                      <div className="flex items-center px-1 overflow-hidden">
+                        {leftLabel && leftName ? (
+                          <div className="flex-1 flex-shrink-0 rounded bg-[#f2f3f8] px-2.5 py-1 overflow-hidden">
+                            <Tooltip title={leftRef}>
+                              <div className="text-overflow">{leftRef}</div>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <div className="flex-1"></div>
+                        )}
+
+                        <div className="flex items-center px-2">
+                          {useIfElseNodeCompareOperator(
+                            condition.compareOperator ?? ''
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex-1"></div>
-                      )}
 
-                      <div className="flex items-center px-2">
-                        {useIfElseNodeCompareOperator(
-                          condition.compareOperator
+                        {rightLabel && rightName ? (
+                          <div className="flex-1 flex-shrink-0 min-w-0 rounded bg-[#f2f3f8] px-2.5 py-1 overflow-hidden">
+                            <Tooltip title={rightRef}>
+                              <div className="text-overflow">{rightRef}</div>
+                            </Tooltip>
+                          </div>
+                        ) : (
+                          <div className="flex-1"></div>
                         )}
                       </div>
 
-                      {rightLabel && rightName ? (
-                        <div className="flex-1 flex-shrink-0 min-w-0 rounded bg-[#f2f3f8] px-2.5 py-1 overflow-hidden">
-                          <Tooltip title={rightRef}>
-                            <div className="text-overflow">{rightRef}</div>
-                          </Tooltip>
+                      {index !== item?.conditions?.length - 1 && (
+                        <div className="relative text-center py-1">
+                          <div className="absolute top-[50%] -mt-[1px] coz-stroke-primary w-full border-0 border-b border-solid"></div>
+                          <span className="min-w-[28px] relative inline-block bg-[#fff]">
+                            {item.logicalOperator === 'and'
+                              ? t('workflow.nodes.ifElseNode.and')
+                              : t('workflow.nodes.ifElseNode.or')}
+                          </span>
                         </div>
-                      ) : (
-                        <div className="flex-1"></div>
                       )}
                     </div>
-
-                    {index !== item?.conditions?.length - 1 && (
-                      <div className="relative text-center py-1">
-                        <div className="absolute top-[50%] -mt-[1px] coz-stroke-primary w-full border-0 border-b border-solid"></div>
-                        <span className="min-w-[28px] relative inline-block bg-[#fff]">
-                          {item.logicalOperator === 'and'
-                            ? t('workflow.nodes.ifElseNode.and')
-                            : t('workflow.nodes.ifElseNode.or')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <SourceHandle
-                nodeId={id}
-                id={item.id}
-                isConnectable={isConnectable}
-              />
-            </div>
-          </span>
-        </>
-      ))}
-    </>
-  );
-});
+                  );
+                })}
+                <SourceHandle
+                  nodeId={id}
+                  id={item.id}
+                  isConnectable={isConnectable}
+                />
+              </div>
+            </span>
+          </>
+        ))}
+      </>
+    );
+  }
+);

@@ -1,3 +1,29 @@
+import type { CatalogContext, KnowledgeRow } from '../catalog';
+import type { FlowsManagerStoreType } from '@/components/workflow/types/zustand/flowsManager';
+
+type KnowledgeContext = Pick<
+  CatalogContext,
+  | 'id'
+  | 'toolRef'
+  | 'orderBy'
+  | 'setOrderBy'
+  | 'searchValue'
+  | 'handleInputChange'
+  | 'toolsList'
+  | 'loading'
+  | 'handleAddTool'
+> & {
+  dataSource: KnowledgeRow[];
+  checkedIds: string[];
+  setKnowledgeDetailModalInfo: FlowsManagerStoreType['setKnowledgeDetailModalInfo'];
+  handleChangeKnowledge: (knowledge: KnowledgeRow) => void;
+  ragType: string;
+};
+type KnowledgePropsFor<Key extends keyof KnowledgeContext> = Pick<
+  KnowledgeContext,
+  Key
+>;
+
 import React, { useMemo, useCallback } from 'react';
 import { Select, Button, message, Tooltip } from 'antd';
 import { FlowInput } from '@/components/workflow/ui';
@@ -9,16 +35,15 @@ import search from '@/assets/imgs/workflow/search-icon.svg';
 import knowledgeIcon from '@/assets/imgs/workflow/knowledgeIcon.png';
 import publishIcon from '@/assets/imgs/workflow/publish-icon.png';
 import toolModalAdd from '@/assets/imgs/workflow/tool-modal-add.png';
-import xingchenIcon from '@/assets/imgs/knowledge/xingchen-icon.svg';
-import xingPuIcon from '@/assets/imgs/knowledge/xingpu-icon.svg';
-import baseVersionIcon from '@/assets/imgs/knowledge/base-version-icon.svg';
 
 const KnowledgeToolbar = ({
   orderBy,
   setOrderBy,
   searchValue,
   handleInputChange,
-}): React.ReactElement => {
+}: KnowledgePropsFor<
+  'orderBy' | 'setOrderBy' | 'searchValue' | 'handleInputChange'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div
@@ -95,7 +120,17 @@ const KnowledgeList = ({
   ragType,
   orderBy,
   loading,
-}): React.ReactElement => {
+}: KnowledgePropsFor<
+  | 'toolRef'
+  | 'dataSource'
+  | 'setKnowledgeDetailModalInfo'
+  | 'checkedIds'
+  | 'handleChangeKnowledge'
+  | 'id'
+  | 'ragType'
+  | 'orderBy'
+  | 'loading'
+>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="flex-1 overflow-auto" ref={toolRef}>
@@ -106,7 +141,7 @@ const KnowledgeList = ({
           minWidth: 1000,
         }}
       >
-        {dataSource.map((item: unknown) => (
+        {dataSource.map(item => (
           <div
             key={item.id}
             className="px-4 py-2.5 hover:bg-[#EBEBF1] cursor-pointer border-t border-[#E5E5EC]"
@@ -161,7 +196,7 @@ const KnowledgeList = ({
                         ...item,
                         open: true,
                         nodeId: id,
-                        repoId: item.id,
+                        repoId: String(item.id),
                       });
                     }}
                   >
@@ -194,7 +229,7 @@ const KnowledgeList = ({
                           </div>
                         ) : (
                           <Button
-                            disabled={ragType && item?.tag !== ragType}
+                            disabled={Boolean(ragType && item.tag !== ragType)}
                             type="primary"
                             className="px-6"
                             style={{
@@ -233,7 +268,18 @@ function index({
   toolsList,
   loading,
   handleAddTool,
-}): React.ReactElement {
+}: KnowledgePropsFor<
+  | 'id'
+  | 'dataSource'
+  | 'toolRef'
+  | 'orderBy'
+  | 'setOrderBy'
+  | 'searchValue'
+  | 'handleInputChange'
+  | 'toolsList'
+  | 'loading'
+  | 'handleAddTool'
+>): React.ReactElement {
   const setKnowledgeDetailModalInfo = useFlowsManager(
     state => state.setKnowledgeDetailModalInfo
   );
@@ -243,7 +289,7 @@ function index({
   }, [toolsList]);
 
   const handleChangeKnowledge = useCallback(
-    (knowledge): void => {
+    (knowledge: KnowledgeRow): void => {
       if (
         !checkedIds.includes(knowledge?.coreRepoId || knowledge?.outerRepoId) &&
         checkedIds?.length >= 30
@@ -253,6 +299,7 @@ function index({
       }
       handleAddTool({
         ...knowledge,
+        id: String(knowledge.id),
         toolId: knowledge?.coreRepoId || knowledge?.outerRepoId,
         type: 'knowledge',
         tag: knowledge?.tag,

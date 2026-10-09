@@ -112,7 +112,7 @@ function index({
           a: MyLink,
           img: ImageRenderer,
           code(props) {
-            const { children, className, node, ...rest } = props;
+            const { children, className, node, ref, ...rest } = props;
 
             const match = /language-(\w+)/.exec(className || '');
             return match && children ? (
@@ -124,7 +124,7 @@ function index({
                 style={github}
               />
             ) : (
-              <code {...rest} className={className}>
+              <code {...rest} ref={ref} className={className}>
                 {children}
               </code>
             );

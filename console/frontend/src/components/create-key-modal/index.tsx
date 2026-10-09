@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { message, Modal, Input, Form, Button, Space } from 'antd';
 import { ExclamationCircleOutlined, CopyOutlined } from '@ant-design/icons';
-import { createKey, deleteKey, searchKeys, updateKey } from '@/services/apiKey';
+import { createKey, updateKey } from '@/services/api-key';
 
 import styles from './index.module.scss';
 
@@ -43,8 +43,9 @@ const CreateKeyModal: React.FC<{
   }, [isEdit, rowData]);
 
   // 弹窗表单提交
-  const handleCreateKey = (values: formValue) => {
+  const handleCreateKey = (values: formValue): void => {
     if (isEdit) {
+      if (!rowData) return;
       updateKey({
         ...rowData,
         name: values.name,
@@ -55,7 +56,7 @@ const CreateKeyModal: React.FC<{
         onCancel();
       });
     } else {
-      createKey({ ...values }).then((res: any) => {
+      createKey({ ...values }).then(res => {
         Modal.info({
           title: '创建新Key',
           icon: null,

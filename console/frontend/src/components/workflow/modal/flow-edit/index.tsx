@@ -8,6 +8,7 @@ import MoreIcons from './more-icons';
 import globalStore from '@/store/global-store';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import copy from 'copy-to-clipboard';
+import type { FlowType } from '@/components/workflow/types';
 
 import formSelect from '@/assets/imgs/main/icon_nav_dropdown.svg';
 import close from '@/assets/imgs/workflow/modal-close.png';
@@ -15,12 +16,20 @@ import flowIdCopyIcon from '@/assets/imgs/workflow/flowId-copy-icon.svg';
 
 const { TextArea } = Input;
 
+type EditableFlow = FlowType & { category?: string | number };
+interface EditFlowFormProps {
+  typeList: { label: string; value: string | number }[];
+  tempFlow: EditableFlow;
+  setTempFlow: React.Dispatch<React.SetStateAction<EditableFlow>>;
+  setShowModal: (open: boolean) => void;
+}
+
 const EditFlowForm = ({
   typeList,
   tempFlow,
   setTempFlow,
   setShowModal,
-}): React.ReactElement => {
+}: EditFlowFormProps): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="mt-6">
@@ -101,16 +110,22 @@ const EditFlowForm = ({
   );
 };
 
-function EditModal({ currentFlow, setModalType }): React.ReactElement {
+function EditModal({
+  currentFlow,
+  setModalType,
+}: {
+  currentFlow: EditableFlow;
+  setModalType: (type: string) => void;
+}): React.ReactElement {
   const { t } = useTranslation();
   const setCurrentFlow = useFlowsManager(state => state.setCurrentFlow);
   const avatarIcon = globalStore(state => state.avatarIcon);
   const avatarColor = globalStore(state => state.avatarColor);
   const getAvatarConfig = globalStore(state => state.getAvatarConfig);
   const [showModal, setShowModal] = useState(false);
-  const [tempFlow, setTempFlow] = useState({});
+  const [tempFlow, setTempFlow] = useState<EditableFlow>(currentFlow);
   const [loading, setLoading] = useState(false);
-  const [typeList, setTypeList] = useState([]);
+  const [typeList, setTypeList] = useState<EditFlowFormProps['typeList']>([]);
 
   useEffect(() => {
     setTempFlow({ ...currentFlow });
@@ -126,6 +141,12 @@ function EditModal({ currentFlow, setModalType }): React.ReactElement {
   }, []);
 
   const handleOk = useCallback(() => {
+    if (
+      !tempFlow.flowId ||
+      !tempFlow.name?.trim() ||
+      !tempFlow.description?.trim()
+    )
+      return;
     setLoading(true);
     const params = {
       id: tempFlow?.id,
@@ -139,15 +160,19 @@ function EditModal({ currentFlow, setModalType }): React.ReactElement {
     saveFlowAPI(params)
       .then(data => {
         setModalType('');
-        setCurrentFlow(currentFlow => ({
-          ...currentFlow,
-          name: tempFlow.name,
-          description: tempFlow.description,
-          updateTime: tempFlow.updateTime,
-          avatarIcon: tempFlow.avatarIcon,
-          color: tempFlow.color,
-          category: tempFlow.category,
-        }));
+        setCurrentFlow(previousFlow =>
+          previousFlow
+            ? {
+                ...previousFlow,
+                name: tempFlow.name,
+                description: tempFlow.description,
+                updateTime: tempFlow.updateTime,
+                avatarIcon: tempFlow.avatarIcon,
+                color: tempFlow.color,
+                category: tempFlow.category,
+              }
+            : previousFlow
+        );
       })
       .finally(() => setLoading(false));
   }, [tempFlow]);
@@ -176,8 +201,8 @@ function EditModal({ currentFlow, setModalType }): React.ReactElement {
               setBotIcon={appIcon =>
                 setTempFlow(tempFlow => ({
                   ...tempFlow,
-                  address: appIcon.name,
-                  avatarIcon: appIcon.value,
+                  address: appIcon.name ?? tempFlow.address,
+                  avatarIcon: appIcon.value ?? tempFlow.avatarIcon,
                 }))
               }
               botColor={currentFlow?.color}
@@ -219,7 +244,8 @@ function EditModal({ currentFlow, setModalType }): React.ReactElement {
                   className="w-[14px] h-[14px] cursor-pointer"
                   alt=""
                   onClick={() => {
-                    copy(currentFlow?.flowId);
+                    if (!currentFlow.flowId) return;
+                    copy(currentFlow.flowId);
                     message.success(t('workflow.nodes.flowModal.copySuccess'));
                   }}
                 />

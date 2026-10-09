@@ -1,9 +1,9 @@
+export type { VcnItem } from '@/components/speaker-modal';
 import { FeedbackItem } from './chat-debugger';
 // Drawer 模块的类型定义统一导出
 
 // Advanced Configuration 相关类型
 export type {
-  VcnItem,
   ChatBackgroundInfo,
   AdvancedConfigType,
   UploadResponse,

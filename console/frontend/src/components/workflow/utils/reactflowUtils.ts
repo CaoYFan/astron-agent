@@ -1,12 +1,24 @@
 import { cloneDeep } from 'lodash';
 import { v4 as uuid } from 'uuid';
-import Ajv from 'ajv';
+import Ajv, { type AnySchema } from 'ajv';
 import i18next from 'i18next';
 import { isJSON } from '@/utils';
 import { InputSchema, ToolArg } from '@/types/plugin-store';
 import { validateVariableAggregationNode } from './variable-aggregation';
+import type {
+  ParameterProperty,
+  ParameterSchema,
+  ToolParameterNode,
+  WorkflowInput,
+  WorkflowNode,
+  WorkflowNodeData,
+  WorkflowNodeParameters,
+  WorkflowOutput,
+  WorkflowReference,
+  WorkflowViewport,
+} from '../types/domain';
 
-const errorOutputTemplate = [
+const errorOutputTemplate: WorkflowOutput[] = [
   {
     id: uuid(),
     name: 'errorCode',
@@ -54,10 +66,9 @@ export function customStringify(obj: unknown): string {
     return `[${arrayItems}]`;
   }
 
-  const keys = Object.keys(obj).sort();
-  const keyValuePairs = keys.map(
-    key => `"${key}":${customStringify(obj[key])}`
-  );
+  const keyValuePairs = Object.entries(obj)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([key, value]) => `"${key}":${customStringify(value)}`);
   return `{${keyValuePairs.join(',')}}`;
 }
 
@@ -90,7 +101,7 @@ function getRandomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function generateRandomPosition(viewPoint: unknown): {
+export function generateRandomPosition(viewPoint: WorkflowViewport): {
   x: number;
   y: number;
 } {
@@ -118,7 +129,7 @@ export function isValidURL(str: string): boolean {
 
 // ==================== 输入数据验证 ====================
 function validateInputName(
-  data: unknown[],
+  data: WorkflowInput[],
   nameCount: Record<string, number>
 ): boolean {
   let passFlag = true;
@@ -144,7 +155,7 @@ function validateInputName(
 }
 
 function validateInputContent(
-  data: unknown[],
+  data: WorkflowInput[],
   noNeedCheckIds: string[]
 ): boolean {
   let passFlag = true;
@@ -160,7 +171,8 @@ function validateInputContent(
 
     if (
       (type === 'ref' && !content.name) ||
-      (type === 'literal' && !content?.trim())
+      (type === 'literal' &&
+        (Array.isArray(content) ? content.length === 0 : !content.trim()))
     ) {
       item.schema.value.contentErrMsg = i18next.t(
         'workflow.nodes.validation.valueCannotBeEmpty'
@@ -169,7 +181,7 @@ function validateInputContent(
     } else if (
       item.customParameterType === 'image_understanding' &&
       type === 'literal' &&
-      !isValidURL(content)
+      (typeof content !== 'string' || !isValidURL(content))
     ) {
       item.schema.value.contentErrMsg = i18next.t(
         'workflow.nodes.validation.pleaseEnterValidURL'
@@ -184,8 +196,8 @@ function validateInputContent(
 }
 
 export const checkedNodeInputData = (
-  data: unknown[],
-  currentCheckNode: unknown
+  data: WorkflowInput[],
+  currentCheckNode: WorkflowNode
 ): boolean => {
   let passFlag = true;
   const nameCount: Record<string, number> = {};
@@ -195,7 +207,7 @@ export const checkedNodeInputData = (
 
   // 检查重复名称
   data.forEach(item => {
-    if (nameCount[item.name] > 1 && !item.nameErrMsg) {
+    if ((nameCount[item.name] ?? 0) > 1 && !item.nameErrMsg) {
       item.nameErrMsg = i18next.t(
         'workflow.nodes.validation.valueCannotBeRepeated'
       );
@@ -220,7 +232,7 @@ export const checkedNodeInputData = (
       item.conditions
         ?.filter(condition =>
           ['not_null', 'null', 'empty', 'not_empty', 'not null'].includes(
-            condition?.compareOperator || condition?.selectCondition
+            condition?.compareOperator || condition?.selectCondition || ''
           )
         )
         ?.map(condition => condition?.rightVarIndex || condition?.varIndex)
@@ -234,7 +246,10 @@ export const checkedNodeInputData = (
           ?.map(input => input?.id)
       : [];
 
-  const noNeedCheckIds = [...noNeedCheckIfElseInputs, ...noNeedCheckToolInputs];
+  const noNeedCheckIds = [
+    ...noNeedCheckIfElseInputs,
+    ...noNeedCheckToolInputs,
+  ].filter((id): id is string => typeof id === 'string');
 
   // 验证内容
   passFlag = validateInputContent(data, noNeedCheckIds) && passFlag;
@@ -243,8 +258,8 @@ export const checkedNodeInputData = (
 };
 
 export const checkedNodeRepeatedInputData = (
-  inputs: unknown[],
-  variableNodes: unknown[]
+  inputs: WorkflowInput[],
+  variableNodes: WorkflowNode[]
 ): boolean => {
   let passFlag = true;
   const variableNodesName = variableNodes
@@ -266,11 +281,11 @@ export const checkedNodeRepeatedInputData = (
 };
 
 // ==================== 输出数据验证 ====================
-function validateProperties(
-  items: unknown[],
+function validateProperties<Property extends ParameterProperty>(
+  items: Property[],
   parentPath = '',
-  parentType: string
-): { validatedItems: unknown[]; flag: boolean } {
+  parentType = ''
+): { validatedItems: Property[]; flag: boolean } {
   let flag = true;
   const nameCount: Record<string, number> = {};
 
@@ -295,7 +310,7 @@ function validateProperties(
     });
 
   newItems.forEach(item => {
-    if (nameCount[item.name] > 1 && !item.nameErrMsg) {
+    if ((nameCount[item.name] ?? 0) > 1 && !item.nameErrMsg) {
       item.nameErrMsg = i18next.t(
         'workflow.nodes.validation.valueCannotBeRepeated'
       );
@@ -330,8 +345,8 @@ function validateProperties(
 }
 
 export const checkedNodeOutputData = (
-  data: unknown[],
-  currentCheckNode: unknown
+  data: WorkflowOutput[],
+  currentCheckNode: WorkflowNode
 ): boolean => {
   let passFlag = true;
 
@@ -363,7 +378,7 @@ export const checkedNodeOutputData = (
 };
 
 // ==================== 节点参数验证 ====================
-function validateTemplateParams(currentCheckNode: unknown): boolean {
+function validateTemplateParams(currentCheckNode: WorkflowNode): boolean {
   if (
     !['spark-llm', 'message'].includes(currentCheckNode?.nodeType) &&
     !(
@@ -385,7 +400,7 @@ function validateTemplateParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateQuestionAnswerParams(currentCheckNode: unknown): boolean {
+function validateQuestionAnswerParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'question-answer') {
     return true;
   }
@@ -401,14 +416,14 @@ function validateQuestionAnswerParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateDecisionMakingParams(currentCheckNode: unknown): boolean {
+function validateDecisionMakingParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'decision-making') {
     return true;
   }
 
   let passFlag = true;
 
-  currentCheckNode.data.nodeParam.intentChains.forEach((chain: unknown) => {
+  (currentCheckNode.data.nodeParam.intentChains ?? []).forEach(chain => {
     if (!chain?.name?.trim()) {
       chain.nameErrMsg = i18next.t(
         'workflow.nodes.validation.valueCannotBeEmpty'
@@ -430,13 +445,13 @@ function validateDecisionMakingParams(currentCheckNode: unknown): boolean {
 
   return (
     passFlag &&
-    currentCheckNode.data.nodeParam.intentChains.every(
-      (chain: unknown) => chain?.name?.trim() && chain?.description?.trim()
+    (currentCheckNode.data.nodeParam.intentChains ?? []).every(
+      chain => chain?.name?.trim() && chain?.description?.trim()
     )
   );
 }
 
-function validateKnowledgeBaseParams(currentCheckNode: unknown): boolean {
+function validateKnowledgeBaseParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType === 'knowledge-base') {
     if (currentCheckNode.data.nodeParam?.repoId?.length === 0) {
       currentCheckNode.data.nodeParam.repoIdErrMsg = i18next.t(
@@ -460,7 +475,7 @@ function validateKnowledgeBaseParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateIflyCodeParams(currentCheckNode: unknown): boolean {
+function validateIflyCodeParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'ifly-code') {
     return true;
   }
@@ -476,15 +491,15 @@ function validateIflyCodeParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateIfElseParams(currentCheckNode: unknown): boolean {
+function validateIfElseParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'if-else') {
     return true;
   }
 
   let passFlag = true;
 
-  currentCheckNode.data.nodeParam.cases.forEach((item: unknown) => {
-    item.conditions.forEach((condition: unknown) => {
+  (currentCheckNode.data.nodeParam.cases ?? []).forEach(item => {
+    item.conditions.forEach(condition => {
       if (!condition.compareOperator) {
         passFlag = false;
         condition.compareOperatorErrMsg = i18next.t(
@@ -499,7 +514,7 @@ function validateIfElseParams(currentCheckNode: unknown): boolean {
   return passFlag;
 }
 
-function validateLoopParams(currentCheckNode: unknown): boolean {
+function validateLoopParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'loop') {
     return true;
   }
@@ -524,7 +539,7 @@ function validateLoopParams(currentCheckNode: unknown): boolean {
     passFlag = false;
   }
 
-  nodeParam?.termination?.conditions?.forEach((condition: unknown) => {
+  nodeParam?.termination?.conditions?.forEach(condition => {
     if (!condition.compareOperator) {
       condition.compareOperatorErrMsg = i18next.t(
         'workflow.nodes.validation.valueCannotBeEmpty'
@@ -538,7 +553,7 @@ function validateLoopParams(currentCheckNode: unknown): boolean {
   return passFlag;
 }
 
-function validateTextJoinerParams(currentCheckNode: unknown): boolean {
+function validateTextJoinerParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'text-joiner') {
     return true;
   }
@@ -557,12 +572,13 @@ function validateTextJoinerParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateAgentParams(currentCheckNode: unknown): boolean {
+function validateAgentParams(currentCheckNode: WorkflowNode): boolean {
   if (currentCheckNode?.nodeType !== 'agent') {
     return true;
   }
 
-  if (!currentCheckNode?.data.nodeParam.instruction?.query?.trim()) {
+  currentCheckNode.data.nodeParam.instruction ??= {};
+  if (!currentCheckNode.data.nodeParam.instruction.query?.trim()) {
     currentCheckNode.data.nodeParam.instruction.queryErrMsg = i18next.t(
       'workflow.nodes.validation.valueCannotBeEmpty'
     );
@@ -579,7 +595,9 @@ function validateAgentParams(currentCheckNode: unknown): boolean {
   );
 }
 
-function validateQuestionAnswerOptions(currentCheckNode: unknown): boolean {
+function validateQuestionAnswerOptions(
+  currentCheckNode: WorkflowNode
+): boolean {
   if (
     currentCheckNode?.nodeType !== 'question-answer' ||
     currentCheckNode.data.nodeParam?.answerType !== 'option'
@@ -590,8 +608,8 @@ function validateQuestionAnswerOptions(currentCheckNode: unknown): boolean {
   let passFlag = true;
 
   currentCheckNode.data.nodeParam.optionAnswer
-    ?.filter((item: unknown) => item?.type === 2)
-    .forEach((item: unknown) => {
+    ?.filter(item => item?.type === 2)
+    .forEach(item => {
       if (!item?.content) {
         passFlag = false;
         item.contentErrMsg = i18next.t(
@@ -613,7 +631,7 @@ function validateQuestionAnswerOptions(currentCheckNode: unknown): boolean {
   return passFlag;
 }
 
-function validateDbId(nodeParam: unknown): boolean {
+function validateDbId(nodeParam: WorkflowNodeParameters): boolean {
   if (!nodeParam?.dbId) {
     nodeParam.dbErrMsg = i18next.t(
       'workflow.nodes.databaseNode.valueCannotBeEmpty'
@@ -624,7 +642,7 @@ function validateDbId(nodeParam: unknown): boolean {
   return true;
 }
 
-function validateTableName(nodeParam: unknown): boolean {
+function validateTableName(nodeParam: WorkflowNodeParameters): boolean {
   if (!nodeParam?.tableName) {
     nodeParam.tableNameErrMsg = i18next.t(
       'workflow.nodes.databaseNode.valueCannotBeEmpty'
@@ -635,7 +653,7 @@ function validateTableName(nodeParam: unknown): boolean {
   return true;
 }
 
-function validateAssignmentList(nodeParam: unknown): boolean {
+function validateAssignmentList(nodeParam: WorkflowNodeParameters): boolean {
   if (!nodeParam?.assignmentList?.length) {
     nodeParam.fieldNameErrMsg = i18next.t(
       'workflow.nodes.databaseNode.valueCannotBeEmpty'
@@ -646,10 +664,10 @@ function validateAssignmentList(nodeParam: unknown): boolean {
   return true;
 }
 
-function validateCases(nodeParam: unknown): boolean {
+function validateCases(nodeParam: WorkflowNodeParameters): boolean {
   let pass = true;
-  nodeParam.cases?.forEach((item: unknown) => {
-    item.conditions?.forEach((condition: unknown) => {
+  nodeParam.cases?.forEach(item => {
+    item.conditions?.forEach(condition => {
       if (!condition.selectCondition) {
         condition.compareOperatorErrMsg = i18next.t(
           'workflow.nodes.databaseNode.valueCannotBeEmpty'
@@ -672,7 +690,7 @@ function validateCases(nodeParam: unknown): boolean {
   return pass;
 }
 
-function validateSql(nodeParam: unknown): boolean {
+function validateSql(nodeParam: WorkflowNodeParameters): boolean {
   if (!nodeParam?.sql?.trim()) {
     nodeParam.sqlErrMsg = i18next.t(
       'workflow.nodes.databaseNode.valueCannotBeEmpty'
@@ -683,7 +701,9 @@ function validateSql(nodeParam: unknown): boolean {
   return true;
 }
 
-export function validateDatabaseParams(currentCheckNode: unknown): boolean {
+export function validateDatabaseParams(
+  currentCheckNode: WorkflowNode
+): boolean {
   if (currentCheckNode?.nodeType !== 'database') return true;
 
   const nodeParam = currentCheckNode.data.nodeParam;
@@ -694,7 +714,7 @@ export function validateDatabaseParams(currentCheckNode: unknown): boolean {
   if (nodeParam?.mode !== 0) {
     passFlag = validateTableName(nodeParam) && passFlag;
 
-    if (nodeParam?.mode > 1) {
+    if ((nodeParam.mode ?? 0) > 1) {
       if (nodeParam?.mode === 2) {
         passFlag = validateAssignmentList(nodeParam) && passFlag;
       }
@@ -707,7 +727,7 @@ export function validateDatabaseParams(currentCheckNode: unknown): boolean {
   return passFlag;
 }
 
-function validateServiceIdParams(currentCheckNode: unknown): boolean {
+function validateServiceIdParams(currentCheckNode: WorkflowNode): boolean {
   const nodeTypesRequiringServiceId = [
     'spark-llm',
     'knowledge-pro-base',
@@ -732,7 +752,7 @@ function validateServiceIdParams(currentCheckNode: unknown): boolean {
   return true;
 }
 
-function validateRetryConfig(currentCheckNode: unknown): boolean {
+function validateRetryConfig(currentCheckNode: WorkflowNode): boolean {
   if (!currentCheckNode?.data?.retryConfig?.shouldRetry) {
     return true;
   }
@@ -753,7 +773,7 @@ function validateRetryConfig(currentCheckNode: unknown): boolean {
   return true;
 }
 
-export const checkedNodeParams = (currentCheckNode: unknown): boolean => {
+export const checkedNodeParams = (currentCheckNode: WorkflowNode): boolean => {
   const validations = [
     validateTemplateParams,
     validateQuestionAnswerParams,
@@ -775,13 +795,16 @@ export const checkedNodeParams = (currentCheckNode: unknown): boolean => {
 };
 
 // ==================== 节点操作函数 ====================
-export function getNextName(arr: unknown[], prefix: string): string {
+export function getNextName(
+  arr: { data: { label?: string } }[],
+  prefix: string
+): string {
   const regex = new RegExp(`^${prefix}_(\\d+)$`);
   const numbers = arr
     .map(item => item?.data?.label)
     .map(name => {
       const match = name?.match(regex);
-      return match ? parseInt(match[1], 10) : null;
+      return match ? parseInt(match[1] ?? '', 10) : null;
     })
     .filter((number): number is number => number !== null);
 
@@ -801,7 +824,7 @@ export function getNextName(arr: unknown[], prefix: string): string {
 
 export function findChildrenNodes(
   startNodeId: string,
-  edges: unknown[]
+  edges: EdgeType[]
 ): string[] {
   const visited = new Set<string>();
   const stack = [startNodeId];
@@ -828,7 +851,7 @@ export function findChildrenNodes(
 
 export function findParentNodes(
   startNodeId: string,
-  edges: unknown[]
+  edges: EdgeType[]
 ): string[] {
   const visited = new Set<string>();
   const stack = [startNodeId];
@@ -858,7 +881,9 @@ export function findParentNodes(
  * @param {Array} arr - 原始数组
  * @returns {Array} 新数组（id 已填充）
  */
-const assignUUIDs = (arr): unknown[] => {
+const assignUUIDs = <Property extends ParameterProperty>(
+  arr: Property[]
+): Property[] => {
   return arr.map(item => {
     const newItem = { ...item, id: uuid() };
 
@@ -877,10 +902,10 @@ const assignUUIDs = (arr): unknown[] => {
   });
 };
 
-export const copyNodeData = (data: unknown): unknown => {
+export const copyNodeData = (data: WorkflowNodeData): WorkflowNodeData => {
   const newData = cloneDeep(data);
 
-  newData.inputs = newData.inputs.map((item: unknown) => ({
+  newData.inputs = newData.inputs.map(item => ({
     ...item,
     id: uuid(),
   }));
@@ -888,7 +913,7 @@ export const copyNodeData = (data: unknown): unknown => {
 
   if (newData?.nodeParam?.intentChains) {
     newData.nodeParam.intentChains = newData.nodeParam.intentChains.map(
-      (item: unknown) => ({
+      item => ({
         ...item,
         id: `intent-one-of::${uuid()}`,
       })
@@ -897,7 +922,7 @@ export const copyNodeData = (data: unknown): unknown => {
 
   if (newData?.nodeParam?.optionAnswer) {
     newData.nodeParam.optionAnswer = newData.nodeParam.optionAnswer.map(
-      (item: unknown) => ({
+      item => ({
         ...item,
         id: `option-one-of::${uuid()}`,
       })
@@ -905,23 +930,26 @@ export const copyNodeData = (data: unknown): unknown => {
   }
 
   if (newData?.nodeParam?.cases) {
-    newData.nodeParam.cases = newData.nodeParam.cases.map((item: unknown) => ({
+    newData.nodeParam.cases = newData.nodeParam.cases.map(item => ({
       ...item,
       id: `branch_one_of::${uuid()}`,
     }));
 
-    if (newData.inputs.length >= 2) {
-      newData.nodeParam.cases[0].conditions[0].leftVarIndex =
-        newData.inputs[0].id;
-      newData.nodeParam.cases[0].conditions[0].rightVarIndex =
-        newData.inputs[1].id;
+    const firstCondition = newData.nodeParam.cases[0]?.conditions[0];
+    const [leftInput, rightInput] = newData.inputs;
+    if (firstCondition && leftInput && rightInput) {
+      firstCondition.leftVarIndex = leftInput.id;
+      firstCondition.rightVarIndex = rightInput.id;
     }
   }
 
   return newData;
 };
 
-export function findItemById(dataArray: unknown[], id: string): unknown | null {
+export function findItemById(
+  dataArray: ParameterProperty[],
+  id: string
+): ParameterProperty | null {
   for (const item of dataArray) {
     if (item.id === id) {
       return item;
@@ -939,7 +967,11 @@ export function findItemById(dataArray: unknown[], id: string): unknown | null {
   return null;
 }
 
-export function renderType(params): string {
+export function renderType(params: {
+  fileType?: string;
+  type?: string;
+  schema?: { type?: string };
+}): string {
   if (params.fileType && params?.type === 'array-string') {
     return `Array<${
       (params?.fileType?.slice(0, 1).toUpperCase() || '') +
@@ -954,7 +986,7 @@ export function renderType(params): string {
   }
   const type = params?.type || params?.schema?.type || '';
   if (type?.includes('array') && type?.split('-')?.[1]) {
-    const baseType = type.split('-')[1];
+    const baseType = type.split('-')[1] ?? '';
     const capitalized = baseType.charAt(0).toUpperCase() + baseType.slice(1);
     return `Array<${capitalized}>`;
   }
@@ -980,13 +1012,13 @@ export function isBaseType(type: string): boolean {
 }
 
 // ==================== 知识库相关函数 ====================
-export function generateKnowledgeOutput(type: string): unknown[] {
-  const commonResult = {
+export function generateKnowledgeOutput(type: string): WorkflowOutput[] {
+  const commonResult: WorkflowOutput = {
     id: uuid(),
     name: 'results',
     schema: {
       type: 'array-object',
-      properties: [] as unknown[],
+      properties: [],
     },
     required: true,
     nameErrMsg: '',
@@ -1022,7 +1054,7 @@ export function generateKnowledgeOutput(type: string): unknown[] {
   return [commonResult];
 }
 
-function createProperty(name: string, type: string): unknown {
+function createProperty(name: string, type: string): ParameterProperty {
   return {
     id: uuid(),
     name,
@@ -1040,7 +1072,7 @@ export function isOldVersionFlow(inputTime: string): boolean {
   return inputDate < fixedTime;
 }
 
-export function hasDecisionMakingNode(nodes: unknown[]): boolean {
+export function hasDecisionMakingNode(nodes: WorkflowNode[]): boolean {
   return nodes?.some(
     node =>
       node?.id?.startsWith('decision-making') &&
@@ -1048,30 +1080,31 @@ export function hasDecisionMakingNode(nodes: unknown[]): boolean {
   );
 }
 
-export const handleReplaceNodeId = (
-  childNodes: unknown[],
+export const handleReplaceNodeId = <T>(
+  childNodes: T[],
   replacements: Record<string, string>
-): unknown[] => {
+): T[] => {
   const childNodesString = JSON.stringify(childNodes);
   return JSON.parse(
     childNodesString.replace(
       new RegExp(Object.keys(replacements).join('|'), 'g'),
-      match => replacements[match]
+      match => replacements[match] ?? match
     )
   );
 };
 
-export const isRefKnowledgeBase = (input: unknown): boolean => {
+export const isRefKnowledgeBase = (input: WorkflowInput): boolean => {
   return (
-    input?.schema?.type !== 'array-object' &&
-    input?.schema?.value?.content?.nodeId?.startsWith('knowledge-base')
+    input.schema.type !== 'array-object' &&
+    input.schema.value.type === 'ref' &&
+    Boolean(input.schema.value.content.nodeId?.startsWith('knowledge-base'))
   );
 };
 
 // ==================== JSON 验证函数 ====================
 export const validateInputJSON = (
   newValue: string,
-  schema: unknown
+  schema: AnySchema
 ): string => {
   try {
     const ajv = new Ajv();
@@ -1093,7 +1126,9 @@ export const validateInputJSON = (
   }
 };
 
-export const generateDefaultInput = (type: string): unknown => {
+export const generateDefaultInput = (
+  type: string
+): string | number | boolean => {
   switch (type) {
     case 'boolean':
       return false;
@@ -1108,77 +1143,46 @@ export const generateDefaultInput = (type: string): unknown => {
 };
 
 // ==================== Schema 生成函数 ====================
-function generateSchemaForNode(node: unknown): unknown {
-  const schema: unknown = {};
-
-  switch (node.type) {
-    case 'array-object':
-      schema.type = 'array';
-      schema.items = {
-        type: 'object',
-        properties: {},
-        required: [],
-      };
-
-      node.properties?.forEach((property: unknown) => {
-        schema.items.properties[property.name] =
-          generateSchemaForNode(property);
-        if (property.required) {
-          schema.items.required.push(property.name);
-        }
-      });
-
-      if (schema.items.required.length === 0) {
-        delete schema.items.required;
-      }
-      break;
-
-    case 'array-integer':
-      schema.type = 'array';
-      schema.items = { type: 'integer' };
-      break;
-
-    case 'array-boolean':
-      schema.type = 'array';
-      schema.items = { type: 'boolean' };
-      break;
-
-    case 'array-string':
-      schema.type = 'array';
-      schema.items = { type: 'string' };
-      break;
-
-    case 'array-number':
-      schema.type = 'array';
-      schema.items = { type: 'number' };
-      break;
-
-    case 'object':
-      schema.type = 'object';
-      schema.properties = {};
-      schema.required = [];
-
-      node.properties?.forEach((property: unknown) => {
-        schema.properties[property.name] = generateSchemaForNode(property);
-        if (property.required) {
-          schema.required.push(property.name);
-        }
-      });
-
-      if (schema.required.length === 0) {
-        delete schema.required;
-      }
-      break;
-
-    default:
-      schema.type = node.type;
-  }
-
-  return schema;
+interface ValidationSchema {
+  type?: string;
+  items?: ValidationSchema;
+  properties?: Record<string, ValidationSchema>;
+  required?: string[];
 }
 
-export const generateValidationSchema = (data: unknown): unknown => {
-  return generateSchemaForNode(data.schema);
+function generateSchemaForNode(
+  node: Pick<ParameterProperty, 'type' | 'properties'>
+): ValidationSchema {
+  if (node.type === 'object' || node.type === 'array-object') {
+    const properties: Record<string, ValidationSchema> = {};
+    const required: string[] = [];
+    node.properties?.forEach(property => {
+      properties[property.name] = generateSchemaForNode(property);
+      if (property.required) required.push(property.name);
+    });
+    const objectSchema: ValidationSchema = { type: 'object', properties };
+    if (required.length > 0) objectSchema.required = required;
+    return node.type === 'array-object'
+      ? { type: 'array', items: objectSchema }
+      : objectSchema;
+  }
+  if (
+    ['array-integer', 'array-boolean', 'array-string', 'array-number'].includes(
+      node.type ?? ''
+    )
+  ) {
+    return {
+      type: 'array',
+      items: { type: node.type?.slice('array-'.length) },
+    };
+  }
+  return { type: node.type };
+}
+
+export const generateValidationSchema = (
+  data: ParameterProperty
+): ValidationSchema => {
+  return generateSchemaForNode(data.schema ?? data);
 };
 
 export const generateUploadType = (type: string): string[] => {
@@ -1199,7 +1203,7 @@ export const generateUploadType = (type: string): string[] => {
 
 // ==================== 工具函数 ====================
 const handleParmasOrder = (
-  source: unknown[],
+  source: { name: string }[],
   target: Record<string, unknown>
 ): Record<string, unknown> => {
   const ordered: Record<string, unknown> = {};
@@ -1213,7 +1217,7 @@ const handleParmasOrder = (
 
   source?.forEach(item => {
     const key = item.name;
-    if (Object.hasOwn(target, key)) {
+    if (Object.prototype.hasOwnProperty.call(target, key)) {
       ordered[key] = target[key];
     }
   });
@@ -1222,11 +1226,11 @@ const handleParmasOrder = (
 };
 
 export const generateInputsAndOutputsOrder = (
-  currentNode: unknown,
+  currentNode: WorkflowNode,
   target: Record<string, unknown>,
-  key: string
+  key: 'inputs' | 'outputs'
 ): Record<string, unknown> => {
-  let source: unknown[] = [];
+  let source: WorkflowOutput[] = [];
 
   if (currentNode?.id?.startsWith('node-end')) {
     source = currentNode?.data?.inputs || [];
@@ -1240,7 +1244,9 @@ export const generateInputsAndOutputsOrder = (
 };
 
 // ==================== 树节点过滤函数 ====================
-export function filterTreeNodes(nodes: unknown[]): unknown[] {
+export function filterTreeNodes(
+  nodes: ToolParameterNode[]
+): ToolParameterNode[] {
   if (!Array.isArray(nodes)) {
     return [];
   }
@@ -1264,14 +1270,16 @@ export function filterTreeNodes(nodes: unknown[]): unknown[] {
 
 // ==================== 对象生成和合并函数 ====================
 export function generateOrUpdateObject(
-  schemaList: unknown[],
+  schemaList: ParameterProperty[],
   oldObj: unknown = null
 ): unknown {
   const newObj = generateDefaultObject(schemaList);
   return oldObj ? mergeByStructure(newObj, oldObj) : newObj;
 }
 
-function generateDefaultObject(schemaList: unknown[]): Record<string, unknown> {
+function generateDefaultObject(
+  schemaList: ParameterProperty[]
+): Record<string, unknown> {
   const defaultValues: Record<string, unknown> = {};
 
   schemaList.forEach(item => {
@@ -1286,11 +1294,11 @@ function generateDefaultObject(schemaList: unknown[]): Record<string, unknown> {
 
 function mergeByStructure(newObj: unknown, oldObj: unknown): unknown {
   if (isObject(newObj)) {
-    return mergeObjectsByStructure(newObj, oldObj);
+    return mergeObjectsByStructure(newObj, isObject(oldObj) ? oldObj : {});
   }
 
   if (Array.isArray(newObj)) {
-    return mergeArraysByStructure(newObj, oldObj);
+    return mergeArraysByStructure(newObj, Array.isArray(oldObj) ? oldObj : []);
   }
 
   return oldObj !== undefined ? oldObj : newObj;
@@ -1327,7 +1335,10 @@ function mergeArraysByStructure(
   return newObj;
 }
 
-function getDefaultValueForType(type: string, schema: unknown): unknown {
+function getDefaultValueForType(
+  type: string | undefined,
+  schema: Pick<ParameterSchema, 'properties'> | undefined
+): unknown {
   const typeHandlers: Record<string, () => unknown> = {
     string: () => '',
     integer: () => 0,
@@ -1340,13 +1351,15 @@ function getDefaultValueForType(type: string, schema: unknown): unknown {
     object: () => handleObjectSchema(schema),
     'array-object': () => handleArrayObjectSchema(schema),
   };
-  return typeHandlers[type]?.();
+  return type ? typeHandlers[type]?.() : undefined;
 }
 
-function handleObjectSchema(schema: unknown): Record<string, unknown> {
+function handleObjectSchema(
+  schema: Pick<ParameterSchema, 'properties'> | undefined
+): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
 
-  (schema.properties || []).forEach((prop: unknown) => {
+  (schema?.properties || []).forEach(prop => {
     obj[prop.name] = getDefaultValueForType(
       prop.type || prop.schema?.type,
       prop
@@ -1356,19 +1369,21 @@ function handleObjectSchema(schema: unknown): Record<string, unknown> {
   return obj;
 }
 
-function handleArrayObjectSchema(schema: unknown): unknown[] {
-  return schema.properties?.length
+function handleArrayObjectSchema(
+  schema: Pick<ParameterSchema, 'properties'> | undefined
+): unknown[] {
+  return schema?.properties?.length
     ? [handleObjectSchema({ properties: schema.properties })]
     : [];
 }
 
-function isObject(value: unknown): boolean {
-  return value && typeof value === 'object' && !Array.isArray(value);
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 // ==================== 路径查找函数 ====================
 export function findPathById(
-  schemaList: unknown[],
+  schemaList: ParameterProperty[],
   targetId: string,
   currentPath: string[] = []
 ): string[] | null {
@@ -1392,39 +1407,40 @@ export function findPathById(
 
 // ==================== 字段删除函数 ====================
 export function deleteFieldByPath(obj: unknown, path: string[]): unknown {
-  if (path.length === 0) return { ...obj };
-
-  const newObj = JSON.parse(JSON.stringify(obj));
-  let current = newObj;
-
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = path[i];
-
-    if (!current[key] && !current?.[0]?.[key]) {
-      return obj;
-    }
-
-    if (current[key]) {
+  if (path.length === 0) return isObject(obj) ? { ...obj } : obj;
+  const newObj: unknown = JSON.parse(JSON.stringify(obj));
+  let current: unknown = newObj;
+  for (const key of path.slice(0, -1)) {
+    if (isObject(current) && current[key]) {
       current = current[key];
-    } else if (current?.[0]?.[key]) {
-      current = current[0][key];
+    } else {
+      const first: unknown = Array.isArray(current) ? current[0] : undefined;
+      if (!isObject(first) || !first[key]) return obj;
+      current = first[key];
     }
   }
-
   const lastKey = path[path.length - 1];
-  if (current && Object.hasOwn(current, lastKey)) {
+  if (lastKey === undefined) return newObj;
+  if (
+    isObject(current) &&
+    Object.prototype.hasOwnProperty.call(current, lastKey)
+  ) {
     delete current[lastKey];
-  } else if (current?.[0] && Object.hasOwn(current[0], lastKey)) {
-    delete current[0][lastKey];
+  } else {
+    const first: unknown = Array.isArray(current) ? current[0] : undefined;
+    if (
+      isObject(first) &&
+      Object.prototype.hasOwnProperty.call(first, lastKey)
+    ) {
+      delete first[lastKey];
+    }
   }
-
   return newObj;
 }
 
-// ==================== 工具参数处理函数 ====================
 export const handleModifyToolUrlParams = (
-  toolUrlParams: unknown[]
-): unknown[] => {
+  toolUrlParams: ToolParameterNode[]
+): WorkflowInput[] => {
   return toolUrlParams
     ?.filter(item => item?.open !== false)
     ?.map(item => ({
@@ -1448,16 +1464,16 @@ export const handleModifyToolUrlParams = (
 };
 
 // ==================== 树遍历函数 ====================
-export const findFromTwoItems = (tree: unknown[]): string[] => {
+export const findFromTwoItems = (tree: ToolParameterNode[]): string[] => {
   const result: string[] = [];
 
-  function traverse(node: unknown): void {
+  function traverse(node: ToolParameterNode): void {
     if (node.from === 1 && node?.fatherType !== 'array') {
       result.push(node.name);
     }
 
     if (node.children && node.children.length > 0) {
-      node.children.forEach((child: unknown) => traverse(child));
+      node.children.forEach(child => traverse(child));
     }
   }
 
@@ -1466,87 +1482,46 @@ export const findFromTwoItems = (tree: unknown[]): string[] => {
 };
 
 // ==================== 树转换函数 ====================
-function transformArrayItem(item: unknown, isFirstLevel: boolean): unknown {
-  if (item.open === false) return null;
-
-  const transformedItem: unknown = {
-    id: item.id || uuid(),
-    name: item.name,
-  };
-
-  if (isFirstLevel) {
-    transformedItem.schema = { type: item.type };
-  } else {
-    transformedItem.type = item.type;
-  }
-
+function transformParameterSchema(item: ToolParameterNode): ParameterSchema {
+  let type = item.type;
+  let children = item.children;
   if (item.type === 'array') {
-    handleArrayTransformation(item, transformedItem, isFirstLevel);
-  } else if (item.children) {
-    handleObjectTransformation(item, transformedItem, isFirstLevel);
+    const firstChild = children?.[0];
+    type = `array-${firstChild?.type}`;
+    children =
+      firstChild?.type === 'object' ? firstChild.children || children : [];
   }
-
-  return transformedItem;
+  const schema: ParameterSchema = { type };
+  if (children) {
+    schema.properties = children.flatMap(child => {
+      if (child.open === false) return [];
+      const childSchema = transformParameterSchema(child);
+      return [{ id: child.id || uuid(), name: child.name, ...childSchema }];
+    });
+  }
+  return schema;
 }
 
-function handleArrayTransformation(
-  item: unknown,
-  transformedItem: unknown,
-  isFirstLevel: boolean
-): void {
-  const firstChildType = item?.children?.[0]?.type;
-
-  if (firstChildType !== 'object') {
-    if (isFirstLevel) {
-      transformedItem.schema.type = `array-${firstChildType}`;
-      transformedItem.schema.properties = [];
-    } else {
-      transformedItem.type = `array-${firstChildType}`;
-      transformedItem.properties = [];
-    }
-  } else {
-    const children = item?.children?.[0]?.children || item.children;
-    const transformedChildren = children
-      ?.map((child: unknown) => transformArrayItem(child, false))
-      .filter(Boolean);
-
-    if (isFirstLevel) {
-      transformedItem.schema.type = 'array-object';
-      transformedItem.schema.properties = transformedChildren;
-    } else {
-      transformedItem.type = 'array-object';
-      transformedItem.properties = transformedChildren;
-    }
-  }
-}
-
-function handleObjectTransformation(
-  item: unknown,
-  transformedItem: unknown,
-  isFirstLevel: boolean
-): void {
-  const transformedChildren = item.children
-    .map((child: unknown) => transformArrayItem(child, false))
-    .filter(Boolean);
-
-  if (isFirstLevel) {
-    transformedItem.schema.type = 'object';
-    transformedItem.schema.properties = transformedChildren;
-  } else {
-    transformedItem.type = 'object';
-    transformedItem.properties = transformedChildren;
-  }
-}
-
-export const transformTree = (inputArray: unknown[]): unknown[] => {
-  return inputArray.map(item => transformArrayItem(item, true)).filter(Boolean);
+export const transformTree = (
+  inputArray: ToolParameterNode[]
+): WorkflowOutput[] => {
+  return inputArray.flatMap(item =>
+    item.open === false
+      ? []
+      : [
+          {
+            id: item.id || uuid(),
+            name: item.name,
+            schema: transformParameterSchema(item),
+          },
+        ]
+  );
 };
 
-// ==================== 项目删除函数 ====================
 function removeFromProperties(
-  propertiesArray: unknown[],
+  propertiesArray: ParameterProperty[],
   idToRemove: string
-): unknown[] {
+): ParameterProperty[] {
   return propertiesArray
     .map(property => {
       if (property.properties && Array.isArray(property.properties)) {
@@ -1561,9 +1536,9 @@ function removeFromProperties(
 }
 
 export const removeItemById = (
-  dataArray: unknown[],
+  dataArray: WorkflowOutput[],
   idToRemove: string
-): unknown[] => {
+): WorkflowOutput[] => {
   return dataArray
     .map(item => {
       if (item.schema && item.schema.properties) {
@@ -1584,10 +1559,12 @@ export const removeItemById = (
 };
 
 // ==================== ID 提取函数 ====================
-export const extractIdsWithNonEmptyProperties = (data: unknown[]): string[] => {
+export const extractIdsWithNonEmptyProperties = (
+  data: ParameterProperty[]
+): string[] => {
   const ids: string[] = [];
 
-  function extractFromItem(item: unknown): void {
+  function extractFromItem(item: ParameterProperty): void {
     const hasSchemaProperties =
       item.schema &&
       Array.isArray(item.schema.properties) &&
@@ -1600,11 +1577,11 @@ export const extractIdsWithNonEmptyProperties = (data: unknown[]): string[] => {
       ids.push(item.id);
 
       if (hasSchemaProperties) {
-        item.schema.properties.forEach(extractFromItem);
+        item.schema?.properties?.forEach(extractFromItem);
       }
 
       if (hasProperties) {
-        item.properties.forEach(extractFromItem);
+        item.properties?.forEach(extractFromItem);
       }
     }
   }
@@ -1613,10 +1590,7 @@ export const extractIdsWithNonEmptyProperties = (data: unknown[]): string[] => {
   return ids;
 };
 
-type NodeType = {
-  id: string;
-  data: unknown;
-};
+type NodeType = Pick<WorkflowNode, 'id' | 'data' | 'nodeType'>;
 
 type EdgeType = {
   source: string;
@@ -1624,11 +1598,11 @@ type EdgeType = {
 };
 
 function buildSchemaReferences(
-  schema: unknown,
+  schema: ParameterProperty,
   parent: { originId: string; prefix?: string; parentType?: string } = {
     originId: '',
   }
-): unknown[] {
+): WorkflowReference[] {
   if (!schema) return [];
 
   const baseValue = parent.prefix
@@ -1636,7 +1610,7 @@ function buildSchemaReferences(
     : schema.name;
 
   // 基础类型
-  if (!['object', 'array-object'].includes(schema.type)) {
+  if (!['object', 'array-object'].includes(schema.type ?? '')) {
     return [
       {
         originId: parent.originId,
@@ -1661,7 +1635,7 @@ function buildSchemaReferences(
       parentType: parent.parentType,
       fileType: schema.allowedFileType?.[0] || '',
       children: Array.isArray(schema.properties)
-        ? schema.properties.flatMap((prop: unknown) =>
+        ? schema.properties.flatMap(prop =>
             buildSchemaReferences(
               {
                 ...prop,
@@ -1685,22 +1659,22 @@ function buildSchemaReferences(
 function buildOwnReferences(
   sourceNode: NodeType,
   targetNode: NodeType
-): unknown[] {
+): WorkflowReference[] {
   const errorOutputs =
-    [1, 2]?.includes(sourceNode?.data?.retryConfig?.errorStrategy) &&
+    [1, 2].includes(sourceNode.data.retryConfig?.errorStrategy ?? 0) &&
     sourceNode?.data?.retryConfig?.shouldRetry
       ? errorOutputTemplate
       : [];
 
   const outputs =
     targetNode?.nodeType === 'iteration'
-      ? sourceNode?.data?.outputs?.filter((output: unknown) =>
+      ? sourceNode?.data?.outputs?.filter(output =>
           output?.schema?.type?.includes('array')
         )
       : [...(sourceNode?.data?.outputs || []), ...errorOutputs];
 
   return (
-    outputs?.flatMap((output: unknown) =>
+    outputs?.flatMap(output =>
       buildSchemaReferences(
         {
           ...output,
@@ -1719,7 +1693,7 @@ export function generateReferences(
   nodes: NodeType[],
   edges: EdgeType[],
   id: string
-): unknown[] {
+): WorkflowReference[] {
   const targetNode = nodes.find(n => n.id === id);
   if (!targetNode) return [];
 
@@ -1757,7 +1731,7 @@ export function generateReferences(
         ],
       };
     })
-    .filter(Boolean) as unknown[];
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return result;
 }
@@ -1786,6 +1760,7 @@ const generateDefaultInputValue = (type: string): unknown => {
   } else if (type === 'object') {
     return '{}';
   }
+  return undefined;
 };
 
 export const transformSchemaToArray = (schema: InputSchema): ToolArg[] => {

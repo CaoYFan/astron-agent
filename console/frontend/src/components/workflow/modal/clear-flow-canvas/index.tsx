@@ -7,7 +7,7 @@ import { Icons } from '@/components/workflow/icons';
 import { useMemoizedFn } from 'ahooks';
 import { getNodeId } from '@/components/workflow/utils/reactflowUtils';
 import { v4 as uuid } from 'uuid';
-import { cloneDeep } from 'lodash';
+import { createResetNodes } from './reset-nodes';
 
 function useDeleteCanvas(): () => void {
   const setNodeInfoEditDrawerlInfo = useFlowsManager(
@@ -27,24 +27,11 @@ function useDeleteCanvas(): () => void {
   const takeSnapshot = currentStore(state => state.takeSnapshot);
 
   return useMemoizedFn(() => {
+    const templates = nodeList.find(node => node.name === '固定节点')?.nodes;
+    const initialNodes = createResetNodes(templates, getNodeId, uuid);
+    if (!initialNodes) return;
     takeSnapshot();
-    const initialNodes = nodeList?.find(
-      node => node?.name === '固定节点'
-    )?.nodes;
-    initialNodes.forEach(node => {
-      node.id = getNodeId(node?.idType);
-      node.type = 'custom';
-      node.nodeType = node.id.split('::')[0];
-      node.data.inputs = node.data.inputs.map(input => ({
-        ...input,
-        id: uuid(),
-      }));
-      node.data.outputs = node.data.outputs.map(output => ({
-        ...output,
-        id: uuid(),
-      }));
-    });
-    setNodes(cloneDeep(initialNodes));
+    setNodes(initialNodes);
     setEdges([]);
     canPublishSetNot();
     setNodeInfoEditDrawerlInfo({

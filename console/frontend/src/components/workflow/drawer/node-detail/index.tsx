@@ -9,13 +9,7 @@ import { nodeTypeComponentMap } from '@/components/workflow/constant';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
 
 // 类型导入
-import {
-  NodeInfoEditDrawerlInfo,
-  RootStyle,
-  NodeDetailComponent,
-  NodeCommonResult,
-  ReactFlowNode,
-} from '@/components/workflow/types';
+import { RootStyle } from '@/components/workflow/types';
 
 // 从统一的图标管理中导入
 import { Icons } from '@/components/workflow/icons';
@@ -26,15 +20,15 @@ const icons = Icons.nodeDetail;
 function index(): React.ReactElement {
   const nodeInfoEditDrawerlInfo = useFlowsManager(
     state => state.nodeInfoEditDrawerlInfo
-  ) as NodeInfoEditDrawerlInfo;
+  );
   const setNodeInfoEditDrawerlInfo = useFlowsManager(
     state => state.setNodeInfoEditDrawerlInfo
-  ) as (info: NodeInfoEditDrawerlInfo) => void;
+  );
   const currentStore = useFlowsManager(state => state.getCurrentStore());
   const setUpdateNodeInputData = useFlowsManager(
     state => state.setUpdateNodeInputData
   );
-  const nodes = currentStore(state => state.nodes) as ReactFlowNode[];
+  const nodes = currentStore(state => state.nodes);
   const [rootStyle, setRootStyle] = useState<RootStyle>({
     height: (window?.innerHeight ?? 0) - 80,
     top: 80,
@@ -55,10 +49,8 @@ function index(): React.ReactElement {
     };
   }, []);
 
-  const nodeInfo = useMemo<NodeDetailComponent | undefined>(() => {
-    return nodes?.find(
-      (item: ReactFlowNode) => item?.id === nodeInfoEditDrawerlInfo.nodeId
-    );
+  const nodeInfo = useMemo(() => {
+    return nodes?.find(item => item?.id === nodeInfoEditDrawerlInfo.nodeId);
   }, [nodes, nodeInfoEditDrawerlInfo.nodeId]);
 
   useEffect(() => {
@@ -71,14 +63,10 @@ function index(): React.ReactElement {
     nodeDesciption,
     isCodeNode,
     nodeIcon,
-  }: NodeCommonResult = useNodeCommon({
+  } = useNodeCommon({
     id: nodeInfo?.id || '',
     data: nodeInfo?.data,
   });
-
-  const data = useMemo<unknown>(() => {
-    return nodeInfo?.data;
-  }, [nodeInfo?.data]);
 
   const renderComponent = useMemoizedFn((): React.ReactElement | null => {
     if (!nodeInfo?.nodeType || !nodeInfo?.id) return null;
@@ -105,21 +93,21 @@ function index(): React.ReactElement {
         <div className="w-full flex items-center gap-3 justify-between">
           <div className="flex items-center gap-3">
             <img src={nodeIcon} className="w-[18px] h-[18px]" alt="" />
-            <Label
-              {...({
-                data,
-                id: nodeInfo?.id || '',
-                maxWidth: 250,
-                labelInput: 'labelInput1',
-              } as unknown)}
-            />
+            {nodeInfo && (
+              <Label
+                data={nodeInfo.data}
+                id={nodeInfo.id}
+                maxWidth={250}
+                labelInput="labelInput1"
+              />
+            )}
             {renderTypeOneClickUpdate()}
           </div>
           <div className="flex items-center gap-3">
-            {showNodeOperation && (
+            {showNodeOperation && nodeInfo && (
               <NodeOperation
-                id={nodeInfo?.id || ''}
-                data={nodeInfo?.data}
+                id={nodeInfo.id}
+                data={nodeInfo.data}
                 labelInput="labelInput1"
               />
             )}

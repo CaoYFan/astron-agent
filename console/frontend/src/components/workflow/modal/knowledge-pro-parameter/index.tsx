@@ -1,3 +1,4 @@
+import type { WorkflowNode } from '@/components/workflow/types/domain';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Slider, Button } from 'antd';
@@ -36,16 +37,19 @@ const KnowledgeProParameter = (): React.ReactElement => {
     });
   }, [currentNode]);
 
-  const handleParameterChange = useMemoizedFn((fn: (old: unknown) => void) => {
-    autoSaveCurrentFlow();
-    setNode(currentNode?.id, old => {
-      fn(old);
-      return {
-        ...cloneDeep(old),
-      };
-    });
-    canPublishSetNot();
-  });
+  const handleParameterChange = useMemoizedFn(
+    (fn: (old: WorkflowNode) => void) => {
+      if (!currentNode) return;
+      autoSaveCurrentFlow();
+      setNode(currentNode.id, old => {
+        fn(old);
+        return {
+          ...cloneDeep(old),
+        };
+      });
+      canPublishSetNot();
+    }
+  );
 
   const handleOk = useMemoizedFn(() => {
     handleParameterChange(old => {

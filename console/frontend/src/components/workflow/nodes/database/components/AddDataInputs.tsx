@@ -1,3 +1,19 @@
+import type {
+  DatabaseEditorContext,
+  DatabaseFieldOption,
+} from '@/components/workflow/nodes/database/types';
+import { isPresent } from '@/components/workflow/nodes/database/types';
+import type { WorkflowInput } from '@/components/workflow/types/domain';
+import { inputReference } from '@/components/workflow/nodes/types';
+
+type AddDataContext = Omit<DatabaseEditorContext, 'item'> & {
+  item: WorkflowInput;
+};
+type AddDataPropsFor<Key extends keyof AddDataContext> = Pick<
+  AddDataContext,
+  Key
+>;
+
 import React, { useMemo, useCallback, useState, memo, useEffect } from 'react';
 import { cloneDeep, isEqual } from 'lodash';
 import { v4 as uuid } from 'uuid';
@@ -19,7 +35,9 @@ import { capitalizeFirstLetter } from '@/components/workflow/utils/reactflowUtil
 import { Tooltip, Select } from 'antd';
 import { cn } from '@/utils';
 
-const RenderNameCell = ({ item }): React.ReactElement => {
+const RenderNameCell = ({
+  item,
+}: AddDataPropsFor<'item'>): React.ReactElement => {
   return (
     <div className="flex flex-col flex-shrink-0 w-1/3">
       <div className="flex items-center w-[204px] relative gap-2.5 overflow-hidden">
@@ -47,7 +65,7 @@ const RenderNameCell = ({ item }): React.ReactElement => {
 const RenderTypeCell = ({
   item,
   handleChangeInputParam,
-}): React.ReactElement => {
+}: AddDataPropsFor<'item' | 'handleChangeInputParam'>): React.ReactElement => {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col flex-shrink-0 w-1/4">
@@ -63,16 +81,14 @@ const RenderTypeCell = ({
             value: 'ref',
           },
         ]}
-        onChange={value =>
+        onChange={(value: 'literal' | 'ref') =>
           handleChangeInputParam(
             item.id,
             (data, value) => {
-              data.schema.value.type = value;
-              if (value === 'literal') {
-                data.schema.value.content = '';
-              } else {
-                data.schema.value.content = {};
-              }
+              data.schema.value =
+                value === 'literal'
+                  ? { ...data.schema.value, type: 'literal', content: '' }
+                  : { ...data.schema.value, type: 'ref', content: {} };
             },
             value
           )
@@ -88,7 +104,9 @@ const RenderValueCell = ({
   id,
   references,
   checkNode,
-}): React.ReactElement => {
+}: AddDataPropsFor<
+  'item' | 'handleChangeInputParam' | 'id' | 'references' | 'checkNode'
+>): React.ReactElement => {
   const autoSaveCurrentFlow = useFlowsManager(
     state => state.autoSaveCurrentFlow
   );
@@ -97,7 +115,11 @@ const RenderValueCell = ({
       {item?.schema?.value?.type === 'literal' ? (
         <FlowNodeInput
           nodeId={id}
-          value={item?.schema?.value?.content}
+          value={
+            typeof item.schema.value.content === 'string'
+              ? item.schema.value.content
+              : JSON.stringify(item.schema.value.content)
+          }
           onChange={value =>
             handleChangeInputParam(
               item.id,
@@ -108,14 +130,10 @@ const RenderValueCell = ({
         />
       ) : (
         <FlowCascader
-          value={
-            item?.schema?.value?.content?.nodeId
-              ? [
-                  item?.schema?.value?.content?.nodeId,
-                  item?.schema?.value?.content?.name,
-                ]
-              : []
-          }
+          value={[
+            inputReference(item)?.nodeId,
+            inputReference(item)?.name,
+          ].filter(isPresent)}
           options={references}
           handleTreeSelect={node =>
             handleChangeInputParam(
@@ -157,7 +175,16 @@ const InputRow = ({
   mode,
   setAddDataOptions,
   handleRemoveInputLine,
-}): React.ReactElement => {
+}: AddDataPropsFor<
+  | 'item'
+  | 'handleChangeInputParam'
+  | 'id'
+  | 'references'
+  | 'checkNode'
+  | 'mode'
+  | 'setAddDataOptions'
+  | 'handleRemoveInputLine'
+>): React.ReactElement => {
   return (
     <div key={item.id} className="flex flex-col gap-1">
       <div className="flex items-start gap-3 overflow-hidden">
@@ -191,6 +218,9 @@ const InputRow = ({
                 {
                   value: uuid(),
                   name: item.name,
+                  type: item.schema.type,
+                  required: item.required,
+                  description: item.description,
                   label: `${item.name}(${item?.schema?.type})`,
                 },
               ]);
@@ -211,7 +241,12 @@ const InputRow = ({
   );
 };
 
-function index({ id, data, fields, children }): React.ReactElement {
+function index({
+  id,
+  data,
+  fields,
+  children,
+}: AddDataPropsFor<'id' | 'data' | 'fields' | 'children'>): React.ReactElement {
   const {
     references,
     handleChangeInputParam,
@@ -231,10 +266,12 @@ function index({ id, data, fields, children }): React.ReactElement {
   const delayCheckNode = currentStore(state => state.delayCheckNode);
   const takeSnapshot = currentStore(state => state.takeSnapshot);
   const [showParams, setShowParams] = useState(true);
-  const [addDataOptions, setAddDataOptions] = useState<unknown[]>([]);
+  const [addDataOptions, setAddDataOptions] = useState<DatabaseFieldOption[]>(
+    []
+  );
 
   const handleAddLine = useCallback(
-    (it): void => {
+    (it: DatabaseFieldOption): void => {
       takeSnapshot();
       setNode(id, old => {
         old.data.inputs.push({
@@ -264,7 +301,7 @@ function index({ id, data, fields, children }): React.ReactElement {
   }, []);
 
   const inputs = useMemo(() => {
-    const inputList = [];
+    const inputList: WorkflowInput[] = [];
     if (data.inputs.length) {
       return data.inputs.filter(item => {
         return !isUUIDv4(item.name);
@@ -290,8 +327,9 @@ function index({ id, data, fields, children }): React.ReactElement {
               type: it.type,
             };
           }
+          return undefined;
         })
-        .filter(Boolean);
+        .filter(isPresent);
       setAddDataOptions([...tempAdd]);
     }
     if (mode === 2) {
@@ -314,18 +352,18 @@ function index({ id, data, fields, children }): React.ReactElement {
     }
   }, [fields, inputs]);
 
-  function isUUIDv4(id): boolean {
+  function isUUIDv4(id: string): boolean {
     const uuidV4Pattern =
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidV4Pattern.test(id);
   }
 
-  const handleAddSelect = (value): void => {
-    handleAddLine(addDataOptions.find(it => it.value == value));
-    addDataOptions.splice(
-      addDataOptions.findIndex(it => it.value == value),
-      1
-    );
+  const handleAddSelect = (value: string | null): void => {
+    const optionIndex = addDataOptions.findIndex(it => it.value === value);
+    const option = addDataOptions[optionIndex];
+    if (!option) return;
+    handleAddLine(option);
+    addDataOptions.splice(optionIndex, 1);
     setAddDataOptions([...addDataOptions]);
     delayCheckNode(id);
   };
@@ -338,7 +376,7 @@ function index({ id, data, fields, children }): React.ReactElement {
     const isRefresh = isEqual(list, prevList);
     if (data?.nodeParam?.mode == 2 && !isRefresh && !historyVersion) {
       handleChangeNodeParam((data, value) => {
-        data.assignmentList = value;
+        data.nodeParam.assignmentList = value;
       }, list);
     }
   }, [addDataOptions]);
@@ -383,7 +421,7 @@ function index({ id, data, fields, children }): React.ReactElement {
               );
             })}
           </div>
-          <Select
+          <Select<string | null>
             value={null}
             disabled={!addDataOptions.length}
             style={{ width: 220 }}

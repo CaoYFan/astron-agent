@@ -6,10 +6,12 @@ import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import copy from 'copy-to-clipboard';
 import JSONPretty from 'react-json-view';
 import MarkdownRender from '@/components/markdown-render';
-import { ResultNodeData, FlowResultType } from '@/components/workflow/types';
 import { Icons } from '@/components/workflow/icons';
 
 const icons = Icons.chatResult;
+
+const hasJsonEntries = (value: unknown): value is object =>
+  typeof value === 'object' && value !== null && Object.keys(value).length > 0;
 
 /** 通用区块标题 + Copy */
 const BlockHeader = ({
@@ -102,11 +104,9 @@ function FlowChatResult(): React.ReactElement {
   const setFlowChatResultOpen = useFlowsManager(
     state => state.setFlowChatResultOpen
   );
-  const flowResult = useFlowsManager(
-    state => state.flowResult
-  ) as FlowResultType;
+  const flowResult = useFlowsManager(state => state.flowResult);
 
-  const resultNodes = useMemo<ResultNodeData[]>((): ResultNodeData[] => {
+  const resultNodes = useMemo(() => {
     return (
       nodes
         ?.filter(
@@ -168,7 +168,7 @@ function FlowChatResult(): React.ReactElement {
               <div key={index}>
                 <div className="text-sm font-medium my-4">{node?.name}</div>
                 <div className="flex flex-col gap-4">
-                  {node?.input && Object.keys(node?.input).length !== 0 && (
+                  {hasJsonEntries(node.input) && (
                     <InputBlock
                       data={node.input}
                       onCopy={() => copyData(JSON.stringify(node.input))}
@@ -180,7 +180,7 @@ function FlowChatResult(): React.ReactElement {
                       onCopy={() => copyData(String(node.rawOutput))}
                     />
                   )}
-                  {node?.output && Object.keys(node?.output).length !== 0 && (
+                  {hasJsonEntries(node.output) && (
                     <OutputBlock
                       data={node.output}
                       onCopy={() => copyData(JSON.stringify(node.output))}

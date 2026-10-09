@@ -14,7 +14,9 @@ import dayjs from 'dayjs';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { useTranslation } from 'react-i18next';
 import { useFlowCommon } from '@/components/workflow/hooks/use-flow-common';
-import { FlowListItem, FlowNode } from '@/components/workflow/types/modal';
+type FlowListItem = NonNullable<
+  Awaited<ReturnType<typeof listFlows>>['pageData']
+>[number];
 import { Icons } from '@/components/workflow/icons';
 
 import flowIcon from '@/assets/imgs/common/icon_flow_item.png';
@@ -37,8 +39,8 @@ export default function index(): React.ReactElement {
 
   const flowList = useMemo((): Array<{ flowId?: string | undefined }> => {
     return nodes
-      ?.filter((node: FlowNode) => node?.nodeType === 'flow')
-      ?.map((node: FlowNode) => ({ flowId: node?.data?.nodeParam?.flowId }));
+      ?.filter(node => node?.nodeType === 'flow')
+      ?.map(node => ({ flowId: node?.data?.nodeParam?.flowId }));
   }, [nodes]);
 
   const checkedIds = useMemo(() => {
@@ -63,14 +65,21 @@ export default function index(): React.ReactElement {
     };
     listFlows(params)
       .then(data => {
-        setAllData(data.pageData);
+        setAllData(data.pageData ?? []);
       })
       .finally(() => setLoading(false));
   }
 
   const handleFlowChangeThrottle = useCallback(
-    throttle(flow => {
-      handleAddFlowNode(flow);
+    throttle((flow: FlowListItem) => {
+      if (!flow.flowId || !flow.appId || !flow.name) return;
+      handleAddFlowNode({
+        ...flow,
+        flowId: flow.flowId,
+        appId: flow.appId,
+        name: flow.name,
+        description: flow.description ?? '',
+      });
     }, 1000),
     [nodes, willAddNode]
   );
@@ -115,7 +124,7 @@ export default function index(): React.ReactElement {
                   {loading ? (
                     <Spin />
                   ) : allData.length > 0 ? (
-                    allData.map((item: unknown) => {
+                    allData.map(item => {
                       return (
                         <div
                           key={item?.id}

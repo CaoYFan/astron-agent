@@ -5,12 +5,17 @@ import { useMemoizedFn } from 'ahooks';
 import { Input, Button, Spin } from 'antd';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import { WebSocketMessage } from '@/components/workflow/types';
 import { Icons } from '@/components/workflow/icons';
 import { getFixedUrl, getAuthorization } from '@/components/workflow/utils';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const { TextArea } = Input;
+interface PromptEnhanceMessage {
+  payload?: { message?: { content?: string } };
+  header?: { status?: number };
+}
+const isPromptKey = (key: string): key is 'template' | 'systemTemplate' =>
+  key === 'template' || key === 'systemTemplate';
 
 function PromptModal(): React.ReactElement {
   const promptOptimizeModalInfo = useFlowsManager(
@@ -32,7 +37,10 @@ function PromptModal(): React.ReactElement {
     id: promptOptimizeModalInfo?.nodeId,
   });
   const promptData = useMemo(
-    () => currentNode?.data?.nodeParam?.[promptOptimizeModalInfo?.key],
+    () =>
+      isPromptKey(promptOptimizeModalInfo.key)
+        ? currentNode?.data.nodeParam[promptOptimizeModalInfo.key]
+        : undefined,
     [currentNode, promptOptimizeModalInfo]
   );
   useEffect(() => {
@@ -62,7 +70,7 @@ function PromptModal(): React.ReactElement {
       onmessage(e) {
         if (e && e.data) {
           if (e.data && isJSON(e.data)) {
-            const data: WebSocketMessage = JSON.parse(e.data);
+            const data: PromptEnhanceMessage = JSON.parse(e.data);
             const content = data?.payload?.message?.content;
             if (content) {
               textQueue.current = [...textQueue.current, ...content.split('')];
@@ -130,7 +138,7 @@ function PromptModal(): React.ReactElement {
     controllerRef.current = null;
     setPromptOptimizeModalInfo({ open: false, nodeId: '', key: '' });
     handleChangeNodeParam((data, value) => {
-      if (data.nodeParam && promptOptimizeModalInfo?.key) {
+      if (isPromptKey(promptOptimizeModalInfo.key)) {
         data.nodeParam[promptOptimizeModalInfo.key] = value;
       }
     }, optimizationPrompt);

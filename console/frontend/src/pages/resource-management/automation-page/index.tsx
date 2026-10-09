@@ -152,7 +152,9 @@ const AutomationPage: FC = () => {
   const [form] = Form.useForm<AutomationFormValues>();
   const [tasks, setTasks] = useState<WorkflowAutomationTask[]>([]);
   const [runs, setRuns] = useState<WorkflowAutomationRun[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowListItem[]>([]);
+  const [workflows, setWorkflows] = useState<
+    Pick<WorkflowListItem, 'name' | 'flowId'>[]
+  >([]);
   const [inputSchemas, setInputSchemas] = useState<WorkflowInputSchema[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -205,13 +207,19 @@ const AutomationPage: FC = () => {
   const fetchWorkflows = useCallback(async (keyword = ''): Promise<void> => {
     setWorkflowLoading(true);
     try {
-      const data = (await listFlows({
+      const data = await listFlows({
         current: 1,
         pageSize: 999,
         search: keyword,
         status: 1,
-      })) as PageData<WorkflowListItem>;
-      setWorkflows(data.pageData || []);
+      });
+      setWorkflows(
+        data.pageData.flatMap(item =>
+          typeof item.name === 'string' && typeof item.flowId === 'string'
+            ? [{ name: item.name, flowId: item.flowId }]
+            : []
+        )
+      );
     } finally {
       setWorkflowLoading(false);
     }

@@ -1,3 +1,4 @@
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { memo, useEffect, useMemo } from 'react';
 import { Button, Input, InputNumber, Select } from 'antd';
 import { cloneDeep } from 'lodash';
@@ -8,7 +9,7 @@ import Outputs from '@/components/workflow/nodes/components/outputs';
 import FLowContainer from '@/components/workflow/nodes/iterator/components/flow-container';
 import useFlowsManager from '@/components/workflow/store/use-flows-manager';
 import { FlowCascader, FLowCollapse } from '@/components/workflow/ui';
-import { NodeCommonProps } from '@/components/workflow/types/hooks';
+
 import { generateReferences } from '@/components/workflow/utils/reactflowUtils';
 
 interface LoopConditionConfig {
@@ -82,7 +83,7 @@ const buildRefValue = (node: any): ValueConfig => ({
 });
 
 export const LoopDetail = memo(
-  (props: NodeCommonProps & { selected?: boolean }): React.ReactElement => {
+  (props: NodeComponentProps & { selected?: boolean }): React.ReactElement => {
     const { id, data, selected } = props;
     const { t } = useTranslation();
     const getCurrentStore = useFlowsManager(state => state.getCurrentStore);
@@ -233,7 +234,7 @@ export const LoopDetail = memo(
       <div id={id}>
         <div className="p-[14px] pb-[6px]">
           <div className="bg-[#fff] py-4 rounded-lg flex flex-col gap-2.5">
-            <Inputs id={id} data={data as any} />
+            <Inputs id={id} data={data} />
             <FLowCollapse
               label={
                 <div className="text-base font-medium">
@@ -575,7 +576,7 @@ export const LoopDetail = memo(
                 </div>
               }
             />
-            <Outputs id={id} data={data as any}>
+            <Outputs id={id} data={data}>
               <div className="text-base font-medium">
                 {t('workflow.nodes.loopNode.output')}
               </div>
@@ -598,7 +599,7 @@ export const Loop = memo(
   }
 );
 
-export const LoopExitDetail = memo((props: NodeCommonProps) => {
+export const LoopExitDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   return (
     <div id={id} className="p-[14px] pb-[6px]">

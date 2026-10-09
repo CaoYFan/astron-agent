@@ -1,9 +1,7 @@
 import { ItemType } from '@/components/workflow/types/hooks';
 import React from 'react';
 
-export const useFlowTypeRender = (
-  item: ItemType
-): React.ReactElement | null => {
+export const useFlowTypeRender = (item: ItemType): React.ReactNode => {
   const isFile = item?.fileType;
   const type = item?.type || item?.schema?.type;
   if (

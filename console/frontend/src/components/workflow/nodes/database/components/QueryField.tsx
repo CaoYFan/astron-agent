@@ -1,3 +1,10 @@
+import type { RadioChangeEvent } from 'antd';
+import type {
+  DatabasePropsFor,
+  DatabaseFieldOption,
+  DatabaseSelectedField,
+} from '@/components/workflow/nodes/database/types';
+
 import React, { useMemo, useState, memo, useEffect } from 'react';
 import { v4 as uuid } from 'uuid';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +14,6 @@ import { capitalizeFirstLetter } from '@/components/workflow/utils/reactflowUtil
 import { Select, Radio } from 'antd';
 import { cn } from '@/utils';
 import { useNodeCommon } from '@/components/workflow/hooks/use-node-common';
-import { UseQueryFieldReturnProps } from '@/components/workflow/types';
 
 import inputAddIcon from '@/assets/imgs/workflow/input-add-icon.png';
 import remove from '@/assets/imgs/workflow/input-remove-icon.png';
@@ -22,15 +28,26 @@ const useQueryField = ({
   from,
   data,
   allFields,
-}): UseQueryFieldReturnProps => {
-  const handleRemoveLine = (id): void => {
+}: DatabasePropsFor<
+  | 'fieldList'
+  | 'setFieldList'
+  | 'addDataOptions'
+  | 'setAddDataOptions'
+  | 'handleChangeNodeParam'
+  | 'historyVersion'
+  | 'from'
+  | 'data'
+  | 'allFields'
+>) => {
+  const handleRemoveLine = (id: string): void => {
     const newList = fieldList.filter(it => it.id != id);
     setFieldList(newList);
     updateFieldList(newList);
   };
 
-  const handleAddSelect = (value): void => {
+  const handleAddSelect = (value: string | null): void => {
     const findRes = addDataOptions.find(it => it.value == value);
+    if (!findRes) return;
     fieldList.push({
       id: uuid(),
       name: findRes.name,
@@ -41,14 +58,16 @@ const useQueryField = ({
     updateFieldList([...fieldList]);
   };
 
-  const sortChange = (e, it): void => {
+  const sortChange = (e: RadioChangeEvent, it: DatabaseSelectedField): void => {
     const current = fieldList.find(cit => cit.id == it.id);
+    if (!current || (e.target.value !== 'asc' && e.target.value !== 'desc'))
+      return;
     current.order = e.target.value;
     setFieldList([...fieldList]);
     updateFieldList([...fieldList]);
   };
 
-  const updateFieldList = (newFieldLsit): void => {
+  const updateFieldList = (newFieldLsit: DatabaseSelectedField[]): void => {
     if (historyVersion) return;
     if (from == 'query') {
       handleChangeNodeParam(
@@ -69,12 +88,12 @@ const useQueryField = ({
     updateOptions(newFieldLsit);
   };
 
-  const updateOptions = (list): void => {
-    const addOpts: unknown = [];
-    for (let i = 0; i < originOptions.length; i++) {
-      const isExit = list.some(item => item.name === originOptions[i].name);
+  const updateOptions = (list: DatabaseSelectedField[]): void => {
+    const addOpts: DatabaseFieldOption[] = [];
+    for (const option of originOptions) {
+      const isExit = list.some(item => item.name === option.name);
       if (!isExit) {
-        addOpts.push(originOptions[i]);
+        addOpts.push(option);
       }
     }
     setAddDataOptions(addOpts);
@@ -111,13 +130,23 @@ const useQueryField = ({
   };
 };
 
-function index({ id, data, allFields, from, children }): React.ReactElement {
+function index({
+  id,
+  data,
+  allFields,
+  from,
+  children,
+}: DatabasePropsFor<
+  'id' | 'data' | 'allFields' | 'from' | 'children'
+>): React.ReactElement {
   const { handleChangeNodeParam } = useNodeCommon({ id, data });
   const { t } = useTranslation();
   const historyVersion = useFlowsManager(state => state.historyVersion);
   const [showParams, setShowParams] = useState(true);
-  const [addDataOptions, setAddDataOptions] = useState<unknown[]>([]);
-  const [fieldList, setFieldList] = useState([]);
+  const [addDataOptions, setAddDataOptions] = useState<DatabaseFieldOption[]>(
+    []
+  );
+  const [fieldList, setFieldList] = useState<DatabaseSelectedField[]>([]);
 
   const {
     originOptions,
@@ -148,7 +177,7 @@ function index({ id, data, allFields, from, children }): React.ReactElement {
     if (!originOptions.length) return;
     if (from === 'query') {
       const list = assignList
-        .map(item => {
+        .map((item): DatabaseSelectedField | null => {
           const current = originOptions.find(i => i.name === item);
           if (!current) return null;
           return {
@@ -158,7 +187,7 @@ function index({ id, data, allFields, from, children }): React.ReactElement {
             order: 'asc',
           };
         })
-        .filter(Boolean);
+        .filter((item): item is DatabaseSelectedField => item !== null);
       setFieldList(list);
       updateOptions(list);
       if (list.length !== assignList.length) {
@@ -167,7 +196,7 @@ function index({ id, data, allFields, from, children }): React.ReactElement {
     }
     if (from === 'sort') {
       const list = orderList
-        .map(item => {
+        .map((item): DatabaseSelectedField | null => {
           const current = originOptions.find(i => i.name === item.fieldName);
           if (!current) return null;
           return {
@@ -177,7 +206,7 @@ function index({ id, data, allFields, from, children }): React.ReactElement {
             order: item.order,
           };
         })
-        .filter(Boolean);
+        .filter((item): item is DatabaseSelectedField => item !== null);
       setFieldList(list);
       updateOptions(list);
       if (list.length !== orderList.length) {
@@ -270,7 +299,7 @@ function index({ id, data, allFields, from, children }): React.ReactElement {
               );
             })}
           </div>
-          <Select
+          <Select<string | null>
             value={null}
             disabled={!addDataOptions.length}
             className={cn('flow-select nodrag w-1/3')}

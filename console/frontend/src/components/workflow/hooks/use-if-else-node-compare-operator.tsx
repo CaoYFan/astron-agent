@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const useIfElseNodeCompareOperator = (
-  type
+  type: string | null | undefined
 ): React.ReactElement | string => {
   if (type === 'contains') {
     return (
@@ -183,5 +183,5 @@ export const useIfElseNodeCompareOperator = (
       </svg>
     );
   }
-  return type;
+  return type ?? '';
 };

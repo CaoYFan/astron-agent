@@ -16,12 +16,6 @@ const TAB_TYPE = {
   feedback: '2',
 };
 
-interface VersionItem {
-  id: string;
-  version?: string;
-  createTime?: string;
-}
-
 const VersionManagement: FC<{
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -43,7 +37,7 @@ const VersionManagement: FC<{
     right: 0,
     zIndex: 998,
   });
-  const [versionList, setVersionList] = useState<VersionItem[]>([]);
+  const [versionList, setVersionList] = useState<ToolItem[]>([]);
   const [activeKey, setActiveKey] = useState(TAB_TYPE['version']);
 
   useEffect(() => {
@@ -149,7 +143,7 @@ const VersionManagement: FC<{
                               : '#e8e8e8',
                           cursor: 'pointer',
                         }}
-                        onClick={() => handleCardClick(item as ToolItem)}
+                        onClick={() => handleCardClick(item)}
                         hoverable
                       >
                         <div className="px-3 pb-[6px]">

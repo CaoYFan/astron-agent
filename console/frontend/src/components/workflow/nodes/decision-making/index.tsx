@@ -1,3 +1,23 @@
+import type { IntentChain } from '@/components/workflow/types/domain';
+type ChangeIntent = <Value>(
+  intentId: string,
+  update: (intent: IntentChain, value: Value) => void,
+  value: Value
+) => void;
+type IntentSectionProps = NodePropsFor<
+  | 'id'
+  | 'setNode'
+  | 'setEdges'
+  | 'takeSnapshot'
+  | 'removeNodeRef'
+  | 'edges'
+  | 'canPublishSetNot'
+  | 'canvasesDisabled'
+  | 'delayCheckNode'
+> & { intentChains: IntentChain[]; handleChangeParam: ChangeIntent };
+
+import type { NodePropsFor } from '@/components/workflow/nodes/types';
+import type { NodeComponentProps } from '@/components/workflow/nodes/types';
 import React, { useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cloneDeep } from 'lodash';
@@ -23,7 +43,9 @@ const AdvancedConfigSection = ({
   data,
   handleChangeNodeParam,
   delayCheckNode,
-}): React.ReactElement => {
+}: NodePropsFor<
+  'id' | 'data' | 'handleChangeNodeParam' | 'delayCheckNode'
+>): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -71,7 +93,7 @@ const IntentSection = ({
   handleChangeParam,
   canvasesDisabled,
   delayCheckNode,
-}): React.ReactElement => {
+}: IntentSectionProps): React.ReactElement => {
   const { t } = useTranslation();
   const intentOrderList = t('workflow.nodes.flow.intentNumbers', {
     returnObjects: true,
@@ -80,27 +102,28 @@ const IntentSection = ({
   const handleAddIntent = useCallback(() => {
     takeSnapshot();
     setNode(id, old => {
-      old.data.nodeParam.intentChains.splice(
-        old.data.nodeParam.intentChains.length - 1,
-        0,
-        {
-          intentType: 2,
-          id: 'intent-one-of::' + uuid(),
-          name: '',
-          description: '',
-        }
-      );
+      const intents =
+        old.data.nodeParam.intentChains ??
+        (old.data.nodeParam.intentChains = []);
+      intents.splice(Math.max(0, intents.length - 1), 0, {
+        intentType: 2,
+        id: 'intent-one-of::' + uuid(),
+        name: '',
+        description: '',
+      });
       return { ...cloneDeep(old) };
     });
     canPublishSetNot();
   }, [id, setNode, takeSnapshot, canPublishSetNot]);
 
   const handleRemoveIntent = useCallback(
-    intentChainId => {
+    (intentChainId: string) => {
       takeSnapshot();
       setNode(id, old => {
         old.data.nodeParam.intentChains =
-          old.data.nodeParam.intentChains.filter(i => i.id !== intentChainId);
+          old.data.nodeParam.intentChains?.filter(
+            i => i.id !== intentChainId
+          ) ?? [];
         return { ...cloneDeep(old) };
       });
       const edge = edges.find(edge => edge.sourceHandle === intentChainId);
@@ -230,7 +253,7 @@ const IntentSection = ({
   );
 };
 
-export const DecisionMakingDetail = memo(props => {
+export const DecisionMakingDetail = memo((props: NodeComponentProps) => {
   const { id, data } = props;
   const { handleChangeNodeParam } = useNodeCommon({
     id,
@@ -250,13 +273,13 @@ export const DecisionMakingDetail = memo(props => {
   const removeNodeRef = currentStore(state => state.removeNodeRef);
   const canPublishSetNot = useFlowsManager(state => state.canPublishSetNot);
 
-  const handleChangeParam = useCallback(
+  const handleChangeParam = useCallback<ChangeIntent>(
     (intentId, fn, value) => {
       setNode(id, old => {
-        const currentIntent = old.data.nodeParam.intentChains.find(
+        const currentIntent = old.data.nodeParam.intentChains?.find(
           item => item.id === intentId
         );
-        fn(currentIntent, value);
+        if (currentIntent) fn(currentIntent, value);
         return {
           ...cloneDeep(old),
         };
@@ -304,7 +327,7 @@ export const DecisionMakingDetail = memo(props => {
   );
 });
 
-export const DecisionMaking = memo(({ id, data }) => {
+export const DecisionMaking = memo(({ id, data }: NodeComponentProps) => {
   const { t } = useTranslation();
   const intentOrderList = t('workflow.nodes.flow.intentNumbers', {
     returnObjects: true,
